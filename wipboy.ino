@@ -24,12 +24,12 @@
  *
  * GPIO ADC          Control knob
  * GPIO 0            Button1
- * GPIO4             Button2
- * GPIO5             Button3
+ * GPIO 4            Button2
+ * GPIO 5            Button3
  *
  *  Free IOs:
- *  GPI01   (only if we get OTA working)
- *  GPIO3   (only if we get OTA working)
+ *  GPI01   (maybe if we get OTA working) (use as I2C for radio, yeah!)
+ *  GPIO3   (maybe if we get OTA working) (use as I2C for radio, yeah!)
  *  GPIO15  (will probably use for LED backlight)
  *  GPIO16  (will probably use for buzzer or sleep mode)
  *  GPIO12  (SPI IN ONLY: can have an SPI MISO here, though it won't have a MOSI.
@@ -394,6 +394,7 @@ void setup()
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
   WiFi.softAP("Target 1425");
 
+
   dnsServer.start(DNS_PORT, "*", apIP);
 
   webServer.onNotFound([]()
@@ -553,9 +554,12 @@ void mainMenu()
 //=========================================
 int scanForNodes()
 {
+  Serial.println("starting scan");
+  long delayTest = millis();
   int numSsids = WiFi.scanNetworks();
   if (numSsids > 64)
     numSsids = 64;    // only have a buffer for so many.
+  
   if (numSsids > 0)
   {
     for (int i=0; i < numSsids; i++)
@@ -565,6 +569,8 @@ int scanForNodes()
       networkNodes[i].rssi = WiFi.RSSI(i);
     }
   }
+  Serial.println("finished");
+  Serial.println(millis() - delayTest);
   return numSsids;
 }
 
@@ -572,7 +578,7 @@ void runNodeChooser()
 {
   if (state == STARTING)
   {
-    state = RUNNING;
+    state = UPDATE;
     changeTitle(S_CHOOSENODE);
     changeButtonLabels(S_BUTTONS4);
     
@@ -604,6 +610,22 @@ void runNodeChooser()
   {
     // redraw the list, from the offset to offset+9
     // draw the selection box (offset Y + (cursor*10))
+    byte range;
+    if (knob.getRange() < 10)
+    {
+      range = knob.getRange();
+    }
+    else
+    {
+      range = 10;
+    }
+    for (byte i = 0; i < range; i++)
+    {
+      tft.setCursor(1, 11+(i*10));
+      tft.print(networkNodes[i].ssid);
+    }
+
+    
     state = RUNNING; 
   }
 
@@ -657,6 +679,7 @@ void runNodeChooser()
     if (b2.isPressed() == 1)
     {
       targetting = false;
+      WiFiClient.disconnect();
       changeMode(MAINMENU);
     }
     if (b3.isPressed() == 1)
@@ -682,11 +705,16 @@ void setTargetInfo(int t)
   target.ssid = networkNodes[t].ssid;
   target.node = networkNodes[t].node;
   target.rssi = networkNodes[t].rssi;
+  WiFiClient.connect(networkNodes[t].ssid, "signpost");
 }
 
 
 void updateTargetInfo()
 {
+  
+  if (!targetting)
+    return;
+  /*
   int numSsids = WiFi.scanNetworks();
   if (numSsids >0)
   {
@@ -702,17 +730,18 @@ void updateTargetInfo()
       }
     } 
   }
-
-  
+  */
+  target.rssi = WiFi.RSSI();
+  lastTargetUpdate = millis();
 }
 
 void runTracker()
 {
   if (state == STARTING)
   {
-    state = RUNNING;
+    state = UPDATE;
     changeTitle(S_TRACKER);
-    changeButtonLabels(S_BUTTONS2);
+    changeButtonLabels(S_BUTTONS3);
     statusInfo.Update = true;
   }
 
@@ -738,11 +767,12 @@ void runTracker()
       { // lost the target temporarily
         tft.print("*Losing Target*");
       }
-      if (lastUpdate > 20)
+      if (lastUpdate > 20000)
       { // lost target completely. stop tracking
         tft.setCursor(10,20);
         tft.print("Target Lost!   ");
         targetting = false;
+        WiFiClient.disconnect();
       }
     }
 
@@ -757,7 +787,7 @@ void runTracker()
     }
     
         
-    stateDelay = 500; // update every half second
+    stateDelay = 250; // update every half second
     state = RUNNING;  
   }
 
@@ -772,7 +802,11 @@ void runTracker()
       if (stateDelay <=0)
         state = UPDATE;
     }
-
+    
+    if (b1.isPressed() == 1)
+    {
+      changeMode(NODECHOOSER);
+    }
     
     if (b2.isPressed() == 1)
     {
@@ -783,6 +817,7 @@ void runTracker()
   else if (state == SHUTDOWN)
   {
     targetting = false;
+    WiFiClient.disconnect();
     changeMode(MAINMENU);
   }
 }
@@ -933,8 +968,9 @@ void runSettings()
     }
     // TODO: draw the selection box
     knob.setRange(4);
+    
     lastSelected = knob.getPos();
-    drawSelectionBox(settingIcons[lastSelected]);
+    //drawSelectionBox(settingIcons[lastSelected]);
   }
   else if (state == RUNNING)
   {

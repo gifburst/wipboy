@@ -26,6 +26,10 @@ int Slider::hasChanged() {
   return 0;    
 }
 
+int Slider::getRange(){
+  return _range;
+}
+
 void Slider::setRange(int range) {
   _range = range;
 }
