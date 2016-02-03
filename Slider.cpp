@@ -26,8 +26,14 @@ int Slider::hasChanged() {
   return 0;    
 }
 
+int Slider::getRange(){
+  return _range;
+}
+
 void Slider::setRange(int range) {
   _range = range;
+  int reading = analogRead(_pin);
+  _sliderPos = map(reading, 9, 924, 0, _range-1);
 }
 
 int Slider::getPos()  {

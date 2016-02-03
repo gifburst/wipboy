@@ -14,6 +14,9 @@
 #include "./Icon.h"
 
 #include "./WipboyNode.h"
+#include "./Wipboy_Gfx.h"
+#include "./Constants.h"
+
 /*
  * ESP8266-12        HY-1.8 SPI
  * REST              Pin 06 (RESET)
@@ -24,12 +27,12 @@
  *
  * GPIO ADC          Control knob
  * GPIO 0            Button1
- * GPIO4             Button2
- * GPIO5             Button3
+ * GPIO 4            Button2
+ * GPIO 5            Button3
  *
  *  Free IOs:
- *  GPI01   (only if we get OTA working)
- *  GPIO3   (only if we get OTA working)
+ *  GPI01   (maybe if we get OTA working) (use as I2C for radio, yeah!)
+ *  GPIO3   (maybe if we get OTA working) (use as I2C for radio, yeah!)
  *  GPIO15  (will probably use for LED backlight)
  *  GPIO16  (will probably use for buzzer or sleep mode)
  *  GPIO12  (SPI IN ONLY: can have an SPI MISO here, though it won't have a MOSI.
@@ -42,175 +45,15 @@
 
 // ------------------------
 // screen
-#define TFT_CS     151
-#define TFT_RST    150
-#define TFT_DC     2
-#define TFT_BACKLIGHT 47
+#define TFT_CS     151 // The CS is tied to gnd and
+#define TFT_RST    150 // the RST is tied to the ESP's RST.  It's easier to just give the library fake pins
+#define TFT_DC     2   // than to edit the library.
+#define TFT_BACKLIGHT 47  // TODO: wire backlight when we get the transitors come in
 
-uint16_t fgColour = ST7735_GREEN;
+uint16_t fgColour = 0x6D45;
 uint16_t bgColour = ST7735_BLACK;
 
-uint16_t colours[] = {
-  ST7735_BLACK,
-  ST7735_WHITE,
-  ST7735_RED,
-  ST7735_GREEN,
-  ST7735_BLUE,
-  0x6D45, // green
-  0x6E19, // blue
-  0xDEAB, // gold
-  0xDF7A, 
-  0x2965,
-  0x10E1,
-  //0x31A2,
-  0x28C4 // dark red  
-};
-
-// TODO: set up an array of all the colours we want to offer.
-// then, in the settings, we can just display the colours and
-// let them select which one they want.  Ooooh! dynamically
-// created icons!  We should do that here!  Wooo :)
-
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
-
-// ------------------------
-// text
-// This is all the text to display and graphics to show.
-// In theory, if we had enough RAM and foreign users, you
-// could have different languages for the GUI stored as string
-// arrays and a simple choice as to which was being used.
-String localisation[] =
-{
-  "Main Menu",
-  "Tracker",
-  "Messenger",
-  "S.T.A.T.S.",
-  "Settings",
-  " Select |        |        ",
-  "        |MainMenu|        ",
-  "fg colour",
-  "bg colour",
-  "brightness",
-  "adminPsswd",
-  " Select |MainMenu|        ",
-  " Select |MainMenu| Cancel ",
-  "Targetting: ",
-  "Signal Strength: ",
-  "Select Node",
-};
-
-
-#define S_MENU 0
-#define S_TRACKER 1
-#define S_MESSENGER 2
-#define S_STATUS 3
-#define S_SETTINGS 4
-#define S_BUTTONS1 5
-#define S_BUTTONS2 6
-#define S_SETTINGS0 7
-#define S_SETTINGS1 8
-#define S_SETTINGS2 9
-#define S_SETTINGS3 10
-#define S_BUTTONS3 11
-#define S_BUTTONS4 12
-#define S_TARGET 13
-#define S_TARGETSTRENGTH 14
-#define S_CHOOSENODE 15
-// ------------------------
-// Graphics
-// In order to avoid having to use an SD card reader (not enough pins)
-// And because this is a monochrome display anyway I am converting
-// images to a byte format.  We can then just copy/paste the text
-// into here program and display them with the "drawBitmap()" cmd.
-
-// I should set them up like the localisation. Need to think on
-// that more
-
-static unsigned char i_pipboy[] = {
-  B00000000, B00000000, B00000000, B00000000,
-  B00000000, B01010001, B00000000, B00000000,
-  B00000000, B00000100, B11000000, B00000000,
-  B00000000, B00100000, B00000000, B00000000,
-  B00000000, B00001100, B00000000, B00000000,
-  B00000000, B00111100, B10000000, B00000000,
-  B00000000, B00010101, B10000000, B00000000,
-  B00000000, B00101101, B10000000, B00000000,
-  B00000000, B00101111, B10000000, B00000000,
-  B00000000, B00011101, B11000000, B00000000,
-  B00000000, B00100001, B10000000, B00000000,
-  B00000000, B00011111, B01000000, B00000000,
-  B00000000, B00011110, B00000000, B00000000,
-  B00000000, B00000100, B10100000, B00000000,
-  B00000000, B00000011, B01000000, B00000000,
-  B00000000, B11000100, B11100000, B00000000,
-  B00000001, B11101101, B11111000, B00000000,
-  B00000010, B11101111, B11111100, B00000000,
-  B00000010, B11101000, B00011100, B00000000,
-  B00000110, B11101011, B00001110, B00000000,
-  B00000111, B01101011, B00000111, B00000000,
-  B00001110, B01110000, B00010111, B10000000,
-  B00001100, B00110111, B10011011, B10000000,
-  B00001101, B00010010, B10011100, B00000000,
-  B00110011, B00110010, B01011100, B01000000,
-  B00110011, B01110111, B00011100, B01000000,
-  B01010000, B00111111, B11000000, B00000000,
-  B00100010, B10010111, B11100000, B01000010,
-  B00000111, B10011011, B11010000, B00001110,
-  B00000000, B10001001, B10011001, B00011110,
-  B00000000, B10010001, B10100000, B01111100,
-  B00000000, B00110000, B10100001, B11110000,
-  B00000000, B11100000, B10111101, B11100000,
-  B00000000, B11100000, B00111101, B10000000,
-  B00000000, B11100000, B00011101, B00000000,
-  B00000000, B11100000, B01000000, B00000000,
-  B00000101, B11100000, B01111100, B00000000,
-  B00000011, B00000000, B00000100, B00000000,
-  B00000000, B00000000, B00111100, B00000000,
-  B00000000, B00000000, B00000000, B00000000,
-};
-
-static unsigned char i_messages[] = {
-  B00000000, B00000000, B00000000, B00000000,
-  B00000001, B01000000, B00000000, B00000000,
-  B00000001, B01000000, B00000000, B00000000,
-  B00100101, B01010010, B00000000, B00000000,
-  B00010000, B00000100, B00000000, B00000000,
-  B00001001, B11001000, B00000000, B00000000,
-  B00110011, B11100110, B00000000, B00000000,
-  B00000110, B00110000, B00000000, B00000000,
-  B00010101, B11010100, B00000000, B00000000,
-  B00000110, B10110000, B00100111, B10000000,
-  B00010011, B01100100, B01011111, B11100000,
-  B00100011, B01100010, B00000101, B11100000,
-  B00001001, B01001000, B00111111, B10100000,
-  B00000001, B01000000, B00101101, B01000000,
-  B00000000, B00000000, B00110111, B10100000,
-  B00000001, B11000000, B00111101, B11000000,
-  B00000010, B00000000, B00100011, B11000000,
-  B00000001, B11010000, B00011111, B10000000,
-  B00000000, B10011111, B10101110, B00000000,
-  B00000000, B01111111, B10110001, B01000000,
-  B00000000, B00011111, B10111110, B11100000,
-  B00000000, B00001111, B11011001, B11110000,
-  B00000000, B00000001, B11011011, B11110000,
-  B00000000, B00000000, B11011011, B11111000,
-  B00000000, B00000000, B01011011, B11111000,
-  B00000000, B00000000, B00011000, B00111100,
-  B00000000, B00000000, B01111111, B10011100,
-  B00000000, B00000000, B01111111, B10011000,
-  B00000000, B00000000, B00001100, B00000100,
-  B00000000, B00000000, B01100011, B10011100,
-  B00000000, B00000000, B01111111, B10001100,
-  B00000000, B00000000, B11111111, B10001000,
-  B00000000, B00000000, B11110111, B11000000,
-  B00000000, B00000000, B11110011, B11000000,
-  B00000000, B00000000, B11100011, B11000000,
-  B00000000, B00000000, B10000001, B11000000,
-  B00000000, B00000000, B01100001, B11000000,
-  B00000000, B00000001, B11000001, B10000000,
-  B00000000, B00000000, B00000000, B11000000,
-  B00000000, B00000000, B00000000, B11000000,
-};
 
 
 
@@ -220,12 +63,17 @@ static unsigned char i_messages[] = {
 // We can also add our HTML webpages in here as strings by
 // copying/pasting.
 
+#define ADMIN_PW "12345"
+char WIFI_PW[] = "asdf";
+
 const byte        DNS_PORT = 53;
 IPAddress         apIP(10, 10, 10, 1);
 DNSServer         dnsServer;
 ESP8266WebServer  webServer(80);
 
 String homepageHTML = "<html><head></head><body>Nothing here at the moment.  Coming soon: phone sync'ing</body></html>";
+
+
 
 
 // ------------------------
@@ -239,25 +87,15 @@ Button b2 = Button(4, true);
 Button b3 = Button(5, true);
 
 
-
 // ------------------------
-// icons, menu items, modes
-
-// We use these constants to define how big the
-// buffers are for the title bar and the button
-// labels.  This is useful later when we have to
-// copy strings into them.  It's an imperfect
-// system though, due for revision
-#define TITLE_BUFFER_SIZE 24
-#define LABELS_BUFFER_SIZE 30
-
+// statusinfo
 // This is a struct we use to just organise all
 // the status info on the top and bottom of the
 // display.  In theory we could just use global
 // variables instead, but I wanted to experiment
 // with organising in structs instead.
 
-// TODO: implement the buzzer status/timer stuffs
+// TODO: implement the buzzer/motor status/timer stuffs
 typedef struct
 {
   bool Update = true;
@@ -272,80 +110,28 @@ StatusInfo statusInfo = StatusInfo{};
 
 
 
-// This is a kind of "sprite" struct for the GUI icons.
-// It contains the location information and labels/mode,
-// which allows us to put our icons anywhere without
-// custom coding the selection box.  The selection box is
-// drawn with the x,y,w,h  while the icon is drawn with
-// x+offsetX, y+offsetY, w, h
-
-// TODO: Store a pointer to the actual icon we're using.
-/*
-typedef struct
-{
-  byte x;
-  byte y;
-  byte w = 32;
-  byte h = 40;
-  byte sbw = 45;
-  byte sbh = 45;
-  byte offsetX = 6;
-  byte offsetY = 2;
-  byte title = S_MENU;
-  byte Mode = 102;
-  unsigned char *img = i_pipboy;
-} Icon;
-*/
-// create an array of all the icons we need for the main menu.
-// TODO: rename it to mainMenuIcons[]
-
+// Ok, instantiating arrays of objects shouldn't be this hard.  This is just dumb.
+// TODO: fix this
 Icon menuIcons[4] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
 Icon settingIcons[4] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
 Icon colourIcons[12] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10),Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10),Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
-/*
-Icon menuIcons[4];
-Icon settingIcons[4];
-Icon colourIcons[12];
-*/
+
 // This is so when we change the selection box we know what the
 // previous selected icon was. That way we can clear out the old
 // one.
 byte lastSelected = 0;
 
+
 // ------------------------
 // Modes and States
-// The "mode" is the program that's running.  Like the
-// tracker or messenger.  The "state" is what state the
-// mode is in, from starting to running to needing update
-// to shutting down.
-
-#define STOPPED 0
-#define STARTING 1
-#define RUNNING 2
-#define UPDATE 3
-#define SHUTDOWN 4
 byte state = STOPPED;
-int stateDelay = 0;
-
-#define MAINMENU 102
-#define TRACKER 103
-#define MESSENGER 104
-#define SETTINGS 105
-#define STATUS 106
-#define ADJUSTBRIGHTNESS 107
-#define ADJUSTFGCOLOUR 108
-#define ADJUSTBGCOLOUR 109
-#define SHOWADMINPW  110
-#define NODECHOOSER 111
+int stateDelay = 0;   // stateDelay is a counter in case we need to pause for a bit
 byte Mode = STOPPED;
 
 
 
-
-
-
-
-
+// ------------------------
+// This is just clearing enough memory to scan up to 64 networks.  Yeah, that's a lot.  
 WipboyNode networkNodes[64] = {
   WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),
   WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),WipboyNode(),
@@ -361,24 +147,12 @@ byte nodeCount = 0;
 WipboyNode target = WipboyNode();
 bool targetting = false;
 long lastTargetUpdate = millis();
-String strBuffer;
-byte targetOffset;
+
+String strBuffer;  // these are used to draw the list to the screen.  I wanted it scrollable so am
+byte targetOffset; // using a trick from video gaming and cameras to do it.
 byte targetCursor;
-Icon selectionIcon = Icon(10,10);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+Icon selectionIcon = Icon(10,10); // This is so we have a simple way of rendering a selection box
 
 // =======================================
 // Setup
@@ -404,8 +178,6 @@ void setup()
   webServer.begin();
 
 
-
-
   // ------------------------
   // screen
 
@@ -428,6 +200,7 @@ void setup()
   
   // Setup complete.  Load menu
   Mode = MAINMENU;
+  state = STARTING;
 }
 
 
@@ -485,6 +258,10 @@ void loop()
   {
     runNodeChooser();
   }
+  else if (Mode == SHOWADMINPW)
+  {
+    runAdminPW();
+  }
   else
     mainMenu();
 }
@@ -505,10 +282,13 @@ void mainMenu()
   // if we have to update the screen
   if (state == STARTING)
   {
+    knob.setRange(4);
+    lastSelected = knob.getPos();
     state = UPDATE;
     changeTitle(menuIcons[knob.getPos()].title);
     changeButtonLabels(S_BUTTONS1);
     statusInfo.Update = true;
+    tft.drawBitmap(80,15, g_logo, 72, 40, fgColour);
     drawMenu();
   }
 
@@ -518,6 +298,12 @@ void mainMenu()
   {
     state = RUNNING;
     //drawMenu();
+    Serial.println("mainmenu update");
+    Serial.println(knob.getPos());
+    Serial.println(menuIcons[knob.getPos()].x);
+    Serial.println(menuIcons[knob.getPos()].y);
+    Serial.println(menuIcons[knob.getPos()].sbw);
+    Serial.println(menuIcons[knob.getPos()].sbh);
     drawSelectionBox(menuIcons[knob.getPos()]);
   }
 
@@ -553,9 +339,12 @@ void mainMenu()
 //=========================================
 int scanForNodes()
 {
+  Serial.println("starting scan");
+  long delayTest = millis();
   int numSsids = WiFi.scanNetworks();
   if (numSsids > 64)
     numSsids = 64;    // only have a buffer for so many.
+  
   if (numSsids > 0)
   {
     for (int i=0; i < numSsids; i++)
@@ -565,6 +354,8 @@ int scanForNodes()
       networkNodes[i].rssi = WiFi.RSSI(i);
     }
   }
+  Serial.println("finished");
+  Serial.println(millis() - delayTest);
   return numSsids;
 }
 
@@ -572,7 +363,7 @@ void runNodeChooser()
 {
   if (state == STARTING)
   {
-    state = RUNNING;
+    state = UPDATE;
     changeTitle(S_CHOOSENODE);
     changeButtonLabels(S_BUTTONS4);
     
@@ -604,6 +395,22 @@ void runNodeChooser()
   {
     // redraw the list, from the offset to offset+9
     // draw the selection box (offset Y + (cursor*10))
+    byte range;
+    if (knob.getRange() < 10)
+    {
+      range = knob.getRange();
+    }
+    else
+    {
+      range = 10;
+    }
+    for (byte i = 0; i < range; i++)
+    {
+      tft.setCursor(1, 11+(i*10));
+      tft.print(networkNodes[i].ssid);
+    }
+
+    
     state = RUNNING; 
   }
 
@@ -643,6 +450,7 @@ void runNodeChooser()
       {
         targetCursor = change;
         selectionIcon.y = 10 + (targetCursor * 10);
+        Serial.println("runNodeChooser running");
         drawSelectionBox(selectionIcon);
         
       }
@@ -657,6 +465,8 @@ void runNodeChooser()
     if (b2.isPressed() == 1)
     {
       targetting = false;
+      WiFi.disconnect();
+      //WiFiClient.disconnect();
       changeMode(MAINMENU);
     }
     if (b3.isPressed() == 1)
@@ -682,11 +492,54 @@ void setTargetInfo(int t)
   target.ssid = networkNodes[t].ssid;
   target.node = networkNodes[t].node;
   target.rssi = networkNodes[t].rssi;
+  lastTargetUpdate = millis();
+  
+  char buf[31];
+  target.ssid.toCharArray(buf, 31);  // there's gotta be a better way to do this
+  WiFi.begin(buf, WIFI_PW);
+  
+  tft.setCursor(10,0);
+  tft.print(" Locking On ");
+  
+  bool connecting = true;
+  while (connecting)
+  {
+    delay(250);
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      connecting = false;
+      lastTargetUpdate = millis();
+      targetting = true;
+    }
+    else if (WiFi.status() == WL_CONNECT_FAILED || WiFi.status() == WL_CONNECTION_LOST)
+    {
+      tft.setCursor(10,0);
+      tft.print(" Lock Failed ");
+      delay(1000);
+      connecting = false;
+      targetting = false;      
+    }
+    else if (millis() - lastTargetUpdate > 30000)
+    {
+      tft.setCursor(10,0);
+      tft.print(" Lock Timeout ");      
+      delay(1000);
+      connecting = false;
+    }
+      
+      
+    
+  }
+
 }
 
 
 void updateTargetInfo()
 {
+  
+  if (!targetting)
+    return;
+  /*
   int numSsids = WiFi.scanNetworks();
   if (numSsids >0)
   {
@@ -702,18 +555,36 @@ void updateTargetInfo()
       }
     } 
   }
-
-  
+  */
+  Serial.println("=====");
+  Serial.println(WiFi.status());
+  if (WiFi.status() == WL_CONNECT_FAILED || WiFi.status() == WL_CONNECTION_LOST)
+  { // lockon failed
+    lastTargetUpdate = millis() - 20001;
+  }
+  else if (WiFi.status() == WL_CONNECTED)
+  {
+    target.rssi = WiFi.RSSI();
+    lastTargetUpdate = millis();
+  }
 }
 
 void runTracker()
 {
   if (state == STARTING)
   {
-    state = RUNNING;
+    state = UPDATE;
     changeTitle(S_TRACKER);
-    changeButtonLabels(S_BUTTONS2);
+    changeButtonLabels(S_BUTTONS3);
     statusInfo.Update = true;
+    tft.drawBitmap(7, 25, g_targetting, 64, 74, fgColour);
+    tft.drawLine(80, 25, 80, 103, fgColour);
+    tft.setCursor(85,20);
+    tft.print(localisation[S_TARGET]);
+    tft.setCursor(85,40);
+    tft.print(localisation[S_TARGETSTRENGTH]);
+
+
   }
 
 
@@ -726,35 +597,36 @@ void runTracker()
     if (targetting)
     {
       updateTargetInfo();
-      tft.setCursor(10,20);
-      tft.print(localisation[S_TARGET]);
+      tft.setCursor(85,30);
       tft.print(target.ssid);
-      tft.setCursor(10,30);
-      tft.print(localisation[S_TARGETSTRENGTH]);
-      tft.print(target.rssi);
-      tft.setCursor(10,40);
-      long lastUpdate = millis() - lastTargetUpdate;
-      if (lastUpdate > 3000)
-      { // lost the target temporarily
-        tft.print("*Losing Target*");
+      tft.setCursor(85, 50);
+      if (target.rssi < 0)
+      {
+        tft.print(target.rssi);
       }
-      if (lastUpdate > 20)
+      tft.setCursor(85, 70);
+      long lastUpdate = millis() - lastTargetUpdate;
+
+      
+      if (lastUpdate > 20000)
       { // lost target completely. stop tracking
-        tft.setCursor(10,20);
-        tft.print("Target Lost!   ");
+        tft.print("TARGET LOST!");
         targetting = false;
+        WiFi.disconnect();
+        //WiFiClient.disconnect();
+      }
+      else if (lastUpdate > 3000)
+      { // lost the target temporarily
+        tft.print("*Losing Tgt*");
+      }
+      else
+      {
+        tft.print("         ");     
       }
     }
 
     //else
     //  draw splash screen
-    else
-    {
-      tft.setCursor(20,20);
-      tft.println("Select a target");
-      tft.println("(and localise this)");
-      tft.println("(and stick a graphic here)");
-    }
     
         
     stateDelay = 500; // update every half second
@@ -772,7 +644,11 @@ void runTracker()
       if (stateDelay <=0)
         state = UPDATE;
     }
-
+    
+    if (b1.isPressed() == 1)
+    {
+      changeMode(NODECHOOSER);
+    }
     
     if (b2.isPressed() == 1)
     {
@@ -783,6 +659,8 @@ void runTracker()
   else if (state == SHUTDOWN)
   {
     targetting = false;
+    WiFi.disconnect();
+    //WiFiClient.disconnect();
     changeMode(MAINMENU);
   }
 }
@@ -867,6 +745,7 @@ void runStats()
     //changeString(S_STATUS, statusInfo.title, sizeof(statusInfo.title));
     //changeString(S_BUTTONS2, statusInfo.buttonLabels,sizeof(statusInfo.buttonLabels));
     statusInfo.Update = true;
+    tft.drawBitmap(64, 30, g_stats, 32, 76, fgColour);
   }
   else if (state == RUNNING)
   {
@@ -922,8 +801,10 @@ void runSettings()
     changeButtonLabels(S_BUTTONS3);
     statusInfo.Update = true;
     // clear edit area. 
-    tft.fillRect(8,10,152,109,bgColour);
+    tft.fillRect(76,10,152,109,bgColour);
     // TODO: draw the settings icon
+    tft.drawBitmap(87, 25, g_settings, 56, 66, fgColour);
+    tft.drawLine(75,12, 75, 113, fgColour);
     
     // display selection options
     for (byte i=0; i < 4; i++)
@@ -933,8 +814,9 @@ void runSettings()
     }
     // TODO: draw the selection box
     knob.setRange(4);
+    
     lastSelected = knob.getPos();
-    drawSelectionBox(settingIcons[lastSelected]);
+    //drawSelectionBox(settingIcons[lastSelected]);
   }
   else if (state == RUNNING)
   {
@@ -948,6 +830,7 @@ void runSettings()
       Serial.println("Knob changed");
       clearSelectionBox(settingIcons[lastSelected]);
       lastSelected = knob.getPos();
+      Serial.println("settings running");
       drawSelectionBox(settingIcons[lastSelected]);
     }
     
@@ -971,6 +854,17 @@ void runSettings()
 }
 
 
+void runAdminPW()
+{
+  if (state == STARTING)
+  {
+    tft.setCursor(80, 100);
+    tft.print(ADMIN_PW);
+    state = RUNNING;
+    Mode = SETTINGS;
+  }
+}
+
 void runFGColour()
 {
   // clear the draw box area
@@ -979,7 +873,7 @@ void runFGColour()
   if (state == STARTING)
   {
     state = RUNNING;
-
+    tft.fillRect(76,10,152,109,bgColour);
 
     for (byte i=0; i < 12; i++)
     {
@@ -993,7 +887,8 @@ void runFGColour()
     }
     knob.setRange(12);
     lastSelected = knob.getPos();
-    
+
+    Serial.println("runFGColour starting");
     drawSelectionBox(colourIcons[lastSelected]);
   }
   
@@ -1007,6 +902,7 @@ void runFGColour()
     {
       clearSelectionBox(colourIcons[lastSelected]);
       lastSelected = knob.getPos();
+      Serial.println("runNodeChooser running");
       drawSelectionBox(colourIcons[lastSelected]);
     }
     
@@ -1045,7 +941,7 @@ void runBGColour()
   if (state == STARTING)
   {
     state = RUNNING;
-
+    tft.fillRect(76,10,152,109,bgColour);
 
     for (byte i=0; i < 12; i++)
     {
@@ -1059,7 +955,8 @@ void runBGColour()
     }
     knob.setRange(12);
     lastSelected = knob.getPos();
-    
+
+    Serial.println("runBGColour starting");
     drawSelectionBox(colourIcons[lastSelected]);
   }
   
@@ -1073,6 +970,7 @@ void runBGColour()
     {
       clearSelectionBox(colourIcons[lastSelected]);
       lastSelected = knob.getPos();
+      Serial.println("runBGColour running");
       drawSelectionBox(colourIcons[lastSelected]);
     }
     
@@ -1159,6 +1057,11 @@ void drawMenu()
 
 void drawSelectionBox(Icon icon)
 {
+  Serial.println("in drawSelectionBox");
+  Serial.println(icon.x);
+  Serial.println(icon.y);
+  Serial.println(icon.sbw);
+  Serial.println(icon.sbh);
   tft.drawRoundRect(icon.x, icon.y, icon.sbw, icon.sbh, 1, fgColour);
 
 }
@@ -1250,7 +1153,9 @@ void statusBarUpdate()
     // if the status information has changed, re-display top bar
     if (statusInfo.displayTop)
     {
-      tft.setCursor(0, 0);
+      tft.drawLine(0,3,160,3, fgColour);
+      tft.setCursor(10, 0);
+      tft.print(' ');
       for (int i = 0; i < sizeof(statusInfo.title) - 1; i++)
       {
         tft.print(statusInfo.title[i]);
@@ -1265,13 +1170,14 @@ void statusBarUpdate()
     }
     else
     {
-      tft.setCursor(145, 0);
+      tft.setCursor(140, 0);
       tft.print("  ");
     }
 
     // bottom buttons label
-    if (statusInfo.displayTop)
+    if (statusInfo.displayBottom)
     {
+      tft.drawLine(0,118, 160,118, fgColour);
       tft.setCursor(0, 120);
       for (int i = 0; i < sizeof(statusInfo.buttonLabels) - 1; i++)
       {
@@ -1341,22 +1247,22 @@ void buildIcons()
   menuIcons[0].y = 10;
   menuIcons[0].Mode = TRACKER;
   menuIcons[0].title = S_TRACKER;
-  menuIcons[0].img = i_messages;
-  menuIcons[1].x = 60;
-  menuIcons[1].y = 10;
+  menuIcons[0].img = i_lightbulb;
+  menuIcons[1].x = 10;
+  menuIcons[1].y = 68;
   menuIcons[1].Mode = MESSENGER;
   menuIcons[1].title = S_MESSENGER;
   menuIcons[1].img = i_messages;
-  menuIcons[2].x = 110;
-  menuIcons[2].y = 10;
+  menuIcons[2].x = 60;
+  menuIcons[2].y = 68;
   menuIcons[2].Mode = STATUS;
   menuIcons[2].title = S_STATUS;
   menuIcons[2].img = i_messages;
-  menuIcons[3].x = 10;
+  menuIcons[3].x = 110;
   menuIcons[3].y = 68;
   menuIcons[3].Mode = SETTINGS;
   menuIcons[3].title = S_SETTINGS;
-  menuIcons[3].img = i_pipboy;
+  menuIcons[3].img = i_settings;
 
   /*
   for (byte i=0; i<4; i++)
@@ -1392,7 +1298,7 @@ void buildIcons()
   settingIcons[2].sbw = 62;
   settingIcons[2].sbh = 10;
   settingIcons[2].title = S_SETTINGS2;
-  settingIcons[2].Mode = ADJUSTFGCOLOUR;
+  settingIcons[2].Mode = ADJUSTBRIGHTNESS;
   settingIcons[3].x = 0;
   settingIcons[3].y = 45;
   settingIcons[3].w = 62;
@@ -1402,7 +1308,7 @@ void buildIcons()
   settingIcons[3].sbw = 62;
   settingIcons[3].sbh = 10;
   settingIcons[3].title = S_SETTINGS3;
-  settingIcons[3].Mode = ADJUSTFGCOLOUR;
+  settingIcons[3].Mode = SHOWADMINPW;
 
   byte x;
   byte y;

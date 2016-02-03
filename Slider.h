@@ -10,6 +10,7 @@ class Slider
     int hasChanged();
     int getPos();
     int getRawPos();
+    int getRange();
     void setRange(int range);
   private:
     int _pin;
