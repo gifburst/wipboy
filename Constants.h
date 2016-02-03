@@ -48,7 +48,6 @@ String localisation[] =
 #define S_TARGETSTRENGTH 14
 #define S_CHOOSENODE 15
 
-
 // ------------------------
 // icons, menu items, modes
 
@@ -74,6 +73,8 @@ String localisation[] =
 #define RUNNING 2
 #define UPDATE 3
 #define SHUTDOWN 4
+#define MENUSTATE 5
+#define INMODE 6
 
 #define MAINMENU 102
 #define TRACKER 103
@@ -85,7 +86,28 @@ String localisation[] =
 #define ADJUSTBGCOLOUR 109
 #define SHOWADMINPW  110
 #define NODECHOOSER 111
+#define RADIO 106
 
+byte ModesRef[] =
+{
+ STATUS,
+ TRACKER,
+ MESSENGER,
+ SETTINGS,
+ RADIO 
+};
+
+String ModesStrings[] = 
+{
+  "STATS",
+  "Trkr",
+  "Msgs",
+  "CFG",
+  "Radio"
+};
+// |-------------------------|
+//  STATS - Trkr - Msgs - CFG   
+// |STATS|Trkr|Msgs|CFG|Radio|
 // -----------------------------
 // list of colours
 
