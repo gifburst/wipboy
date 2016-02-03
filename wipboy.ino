@@ -1,5 +1,4 @@
 //import
-// test
 // webserver
 #include <ESP8266WiFi.h>
 #include "./DNSServer.h"                  // Patched lib
