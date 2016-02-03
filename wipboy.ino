@@ -199,20 +199,70 @@ void setup()
   buildIcons();
   
   // Setup complete.  Load menu
-  Mode = MAINMENU;
-  state = STARTING;
+  Mode = STATUS;
+  setMenuState();
 }
 
 
 
+/*
+ * if state == MENUSTATE // This state is when they choose the menu.  check the knob, change if need be
+ *  if knob.changed
+ *    changemode(newMode) // this will run the "starting" section of the mode.  which will then drop itself back into MENUSTATE probably
+ *  // if it's not menustate, we're still running whatever mode we like, and it can manage on its own then toggle back into menustate when it's done updating
+ * 
+ * |------------------------|
+ * STATS|Trkr|Msgs|CFG|Radio
+ */
 
+byte modePos = 0;
+void loop()
+{
+  backgroundUpdate();
+  statusBarUpdate();
 
+  if (state == MENUSTATE)
+  {
+    if (knob.hasChanged())
+    {
+      changeMode(ModesRef[knob.getPos()]);
+      modePos = knob.getPos();
+      statusInfo.Update = true;
+    }
+  }
 
+  switch (Mode) // you know, this didn't give me anything better than the if statements in terms of space saving.
+  {             // I'm going to convert it back.
+    case TRACKER:
+      runTracker();
+    break;
+    case MESSENGER:
+      runMessenger();
+    break;
+    case STATUS:
+      runStats();
+    break;
+    case SETTINGS:
+      runSettings();
+    break;
+    case ADJUSTFGCOLOUR:
+      runFGColour();
+    break;
+    case ADJUSTBGCOLOUR:
+      runBGColour();
+    break;
+    case NODECHOOSER:
+      runNodeChooser();
+    break;
+    case SHOWADMINPW:
+      runAdminPW();
+    break;
+  }
 
-
+}
 // =======================================
 // Loop
-void loop()
+void oldloop()
 {
   // run the background updater.  This keeps everything
   // ticking along without clogging the loop() function
@@ -267,6 +317,10 @@ void loop()
 }
 
 
+
+
+
+
 //=========================================
 // Modes
 //=========================================
@@ -286,7 +340,6 @@ void mainMenu()
     lastSelected = knob.getPos();
     state = UPDATE;
     changeTitle(menuIcons[knob.getPos()].title);
-    changeButtonLabels(S_BUTTONS1);
     statusInfo.Update = true;
     tft.drawBitmap(80,15, g_logo, 72, 40, fgColour);
     drawMenu();
@@ -298,12 +351,6 @@ void mainMenu()
   {
     state = RUNNING;
     //drawMenu();
-    Serial.println("mainmenu update");
-    Serial.println(knob.getPos());
-    Serial.println(menuIcons[knob.getPos()].x);
-    Serial.println(menuIcons[knob.getPos()].y);
-    Serial.println(menuIcons[knob.getPos()].sbw);
-    Serial.println(menuIcons[knob.getPos()].sbh);
     drawSelectionBox(menuIcons[knob.getPos()]);
   }
 
@@ -365,8 +412,7 @@ void runNodeChooser()
   {
     state = UPDATE;
     changeTitle(S_CHOOSENODE);
-    changeButtonLabels(S_BUTTONS4);
-    
+   
     // populate the list
     // and set the knob to list length while we're at it
     knob.setRange(scanForNodes());
@@ -461,32 +507,11 @@ void runNodeChooser()
       setTargetInfo(knob.getPos());
       targetting = true;
       changeMode(TRACKER);
-    }
-    if (b2.isPressed() == 1)
-    {
-      targetting = false;
-      WiFi.disconnect();
-      //WiFiClient.disconnect();
-      changeMode(MAINMENU);
-    }
-    if (b3.isPressed() == 1)
-    {
-      changeMode(TRACKER);
-    }
-
-
-    //if button1.isPressed
-    //  target = networkNodes[knobpos]
-    //  targetting = true
-    //  changeMode(tracker)
-    //if button2.isPressed
-    //  targetting = false
-    //  changeMode(mainmenu)   
-
-    
+    }    
   }
-  
 }
+
+
 void setTargetInfo(int t)
 {
   target.ssid = networkNodes[t].ssid;
@@ -525,39 +550,22 @@ void setTargetInfo(int t)
       tft.print(" Lock Timeout ");      
       delay(1000);
       connecting = false;
-    }
-      
-      
-    
+    } 
   }
-
 }
 
+void setMenuState()
+{
+  state = MENUSTATE;
+  knob.setRange(5);
+  lastSelected = knob.getPos();
+}
 
 void updateTargetInfo()
 {
-  
   if (!targetting)
     return;
-  /*
-  int numSsids = WiFi.scanNetworks();
-  if (numSsids >0)
-  {
-    for (int i=0; i < numSsids; i++)
-    {
-      strBuffer = WiFi.SSID(i);
-      if (target.ssid == strBuffer)
-      { // found target. set info, which isn't much really.
-        target.rssi = WiFi.RSSI(i);
-        target.node = i;
-        lastTargetUpdate = millis();
-        break;
-      }
-    } 
-  }
-  */
-  Serial.println("=====");
-  Serial.println(WiFi.status());
+  
   if (WiFi.status() == WL_CONNECT_FAILED || WiFi.status() == WL_CONNECTION_LOST)
   { // lockon failed
     lastTargetUpdate = millis() - 20001;
@@ -569,13 +577,15 @@ void updateTargetInfo()
   }
 }
 
+
+
 void runTracker()
 {
   if (state == STARTING)
   {
     state = UPDATE;
     changeTitle(S_TRACKER);
-    changeButtonLabels(S_BUTTONS3);
+
     statusInfo.Update = true;
     tft.drawBitmap(7, 25, g_targetting, 64, 74, fgColour);
     tft.drawLine(80, 25, 80, 103, fgColour);
@@ -630,13 +640,13 @@ void runTracker()
     
         
     stateDelay = 500; // update every half second
-    state = RUNNING;  
+    setMenuState();
   }
 
 
 
 
-  else if (state == RUNNING)
+  else if (state == MENUSTATE)
   {
     if (targetting)
     {
@@ -649,87 +659,10 @@ void runTracker()
     {
       changeMode(NODECHOOSER);
     }
-    
-    if (b2.isPressed() == 1)
-    {
-      state = SHUTDOWN;
-    }
-  }
-
-  else if (state == SHUTDOWN)
-  {
-    targetting = false;
-    WiFi.disconnect();
-    //WiFiClient.disconnect();
-    changeMode(MAINMENU);
   }
 }
 
 
-// This is broken away as we have to do it from multiple
-// functions (tracker, sending messages).
-
-/*
-
-
-void updateTargetList()
-{
-  for (byte x = 0; x < 30; x++)
-  {
-    nodes[x].lastUpdate += 1;
-    if (nodes[x].lastUpdate > 20)
-    {
-      // it's probably expired out. 20 seconds since
-      // we saw it last.  wipe it
-      nodes[x].node = 255;
-    }
-  }
-
-
-  if (millis() > updateTargetListCountdown)
-  {
-    updateTargetListCountdown = millis() + updateTargetListDelay;
-    byte numSSIDs = WiFi.scanNetworks();
-    bool nodeFound;
-    byte i;
-    byte x;
-    for (i = 0; i < numSSIDs; i++)
-    {
-      nodeFound = false;
-      String SSID = WiFi.SSID(i);
-      for (x = 0; x < 30; x++)
-      {
-        if (nodes[x].SSID == SSID)
-        { // it's the node in question. refresh it.
-          nodes[x].node = i;
-          nodes[x].signalStrength = WiFi.RSSI(i);
-          nodes[x].lastUpdate = 0;
-          nodeFound = true;
-          break;
-        }
-      }
-      if (!nodeFound)
-      {
-        for (x = 0; x < 30; x++)
-        {
-          if (nodes[x].node == 255)
-          {
-            // found an empty spot
-            nodes[x].node = i;
-            nodes[x].SSID = SSID;
-            nodes[x].signalStrength = WiFi.RSSI(i);
-            nodes[x].lastUpdate = 0;
-            break;
-          }
-        }
-        // if it falls out here then there's no space
-        // to add it.  We'll probably have to filter for
-        // wipboy-specific nodes in crowded areas.
-      }
-    }
-  }
-}
-*/
 
 //=========================================
 //=========================================
@@ -739,26 +672,21 @@ void runStats()
   {
     tft.setCursor(10, 20);
     tft.print("Feature not enabled");
-    state = RUNNING;
+    setMenuState();
     changeTitle(S_STATUS);
-    changeButtonLabels(S_BUTTONS2);
+
     //changeString(S_STATUS, statusInfo.title, sizeof(statusInfo.title));
     //changeString(S_BUTTONS2, statusInfo.buttonLabels,sizeof(statusInfo.buttonLabels));
     statusInfo.Update = true;
     tft.drawBitmap(64, 30, g_stats, 32, 76, fgColour);
   }
-  else if (state == RUNNING)
+  else if (state == MENUSTATE)
   {
 
-    if (b2.isPressed() == 1)
+    if (b1.isPressed() == 1)
     {
       state = SHUTDOWN;
     }
-  }
-  else if (state == SHUTDOWN)
-  {
-
-    changeMode(MAINMENU);
   }
 }
 
@@ -796,10 +724,9 @@ void runSettings()
   if (state == STARTING)
   {
     Serial.println("settings starting");
-    state = RUNNING;
+    setMenuState();
     changeTitle(S_SETTINGS);
-    changeButtonLabels(S_BUTTONS3);
-    statusInfo.Update = true;
+
     // clear edit area. 
     tft.fillRect(76,10,152,109,bgColour);
     // TODO: draw the settings icon
@@ -812,13 +739,21 @@ void runSettings()
       tft.setCursor(settingIcons[i].x+settingIcons[i].offsetX, settingIcons[i].y+settingIcons[i].offsetY);
       tft.print(localisation[settingIcons[i].title]);
     }
-    // TODO: draw the selection box
-    knob.setRange(4);
-    
-    lastSelected = knob.getPos();
-    //drawSelectionBox(settingIcons[lastSelected]);
   }
-  else if (state == RUNNING)
+
+  else if (state == MENUSTATE)
+  {
+    if (b1.isPressed() == 1)
+    {
+      // we've entered the selection window.  change the state to stop menu choosing and set the knob.
+      knob.setRange(4);
+      lastSelected = knob.getPos();
+      drawSelectionBox(settingIcons[lastSelected]);
+      state = INMODE;
+    }
+  }
+  
+  else if (state == INMODE)
   {
     // check the knob
     // if hasChanged()
@@ -827,18 +762,11 @@ void runSettings()
     //  draw selection box
     if (knob.hasChanged())
     {
-      Serial.println("Knob changed");
       clearSelectionBox(settingIcons[lastSelected]);
       lastSelected = knob.getPos();
-      Serial.println("settings running");
       drawSelectionBox(settingIcons[lastSelected]);
     }
     
-    if (b2.isPressed()==1)
-    {
-      Serial.println("b2 pressed");
-      state = SHUTDOWN;
-    }
     else if (b1.isPressed()==1)
     {
       Serial.println("b1 pressed");
@@ -846,10 +774,6 @@ void runSettings()
       // I'm not using changeMode() because I don't want to undraw the settings window
       state = STARTING;
     }
-  }
-  else if (state == SHUTDOWN)
-  {
-    changeMode(MAINMENU);
   }
 }
 
@@ -860,7 +784,7 @@ void runAdminPW()
   {
     tft.setCursor(80, 100);
     tft.print(ADMIN_PW);
-    state = RUNNING;
+    setMenuState();
     Mode = SETTINGS;
   }
 }
@@ -902,7 +826,6 @@ void runFGColour()
     {
       clearSelectionBox(colourIcons[lastSelected]);
       lastSelected = knob.getPos();
-      Serial.println("runNodeChooser running");
       drawSelectionBox(colourIcons[lastSelected]);
     }
     
@@ -913,23 +836,9 @@ void runFGColour()
     {
       fgColour = colours[lastSelected];
       tft.setTextColor(fgColour, bgColour);
+      lastSelected = 4;
       changeMode(SETTINGS);
     }
-    
-    // if button2 (mainmenu)
-    //  set the colour to the colours[selected]
-    //  changeMode(mainmenu)
-    else if (b2.isPressed()==1)
-    {
-      fgColour = colours[lastSelected];
-      tft.setTextColor(fgColour, bgColour);
-      changeMode(MAINMENU);
-    }
-    
-    // if button3(cancel)
-    //  changeMode(settings)
-    else if (b3.isPressed())
-      changeMode(SETTINGS);
   }
 }
 
@@ -956,7 +865,6 @@ void runBGColour()
     knob.setRange(12);
     lastSelected = knob.getPos();
 
-    Serial.println("runBGColour starting");
     drawSelectionBox(colourIcons[lastSelected]);
   }
   
@@ -983,21 +891,6 @@ void runBGColour()
       tft.setTextColor(fgColour, bgColour);
       changeMode(SETTINGS);
     }
-    
-    // if button2 (mainmenu)
-    //  set the colour to the colours[selected]
-    //  changeMode(mainmenu)
-    else if (b2.isPressed()==1)
-    {
-      bgColour = colours[lastSelected];
-      tft.setTextColor(fgColour, bgColour);
-      changeMode(MAINMENU);
-    }
-    
-    // if button3(cancel)
-    //  changeMode(settings)
-    else if (b3.isPressed())
-      changeMode(SETTINGS);
   }
 }
 
@@ -1010,25 +903,9 @@ void runMessenger()
   {
     tft.setCursor(10, 20);
     tft.print("Feature not enabled");
-    state = RUNNING;
+    setMenuState();
     changeTitle(S_MESSENGER);
-    changeButtonLabels(S_BUTTONS2);
-    //changeString(S_MESSENGER, statusInfo.title, sizeof(statusInfo.title));
-    //changeString(S_BUTTONS2, statusInfo.buttonLabels,sizeof(statusInfo.buttonLabels));
     statusInfo.Update = true;
-  }
-  else if (state == RUNNING)
-  {
-
-    if (b2.isPressed() == 1)
-    {
-      state = SHUTDOWN;
-    }
-  }
-  else if (state == SHUTDOWN)
-  {
-
-    changeMode(MAINMENU);
   }
 }
 
@@ -1093,6 +970,17 @@ void clearSelectionBox(Icon icon)
 
 void changeMode(byte newMode)
 {
+  
+  if (Mode == TRACKER) // this is a bad place to have this. we need to objectize the modes! TODO!
+  {
+    targetting = false;
+    WiFi.disconnect();
+  }
+  // setting the default for the menustate just in case we need it
+  knob.setRange(5);
+  lastSelected = modePos;
+  
+  
   tft.fillScreen(bgColour);
   Mode = newMode;
   state = STARTING;
@@ -1153,13 +1041,14 @@ void statusBarUpdate()
     // if the status information has changed, re-display top bar
     if (statusInfo.displayTop)
     {
-      tft.drawLine(0,3,160,3, fgColour);
+      tft.drawLine(0,3,60,3, fgColour);
       tft.setCursor(10, 0);
       tft.print(' ');
       for (int i = 0; i < sizeof(statusInfo.title) - 1; i++)
       {
         tft.print(statusInfo.title[i]);
       }
+      tft.drawLine(84,3,160,3, fgColour);
     }
     // mail icon
     // TODO BETTER
@@ -1177,12 +1066,31 @@ void statusBarUpdate()
     // bottom buttons label
     if (statusInfo.displayBottom)
     {
-      tft.drawLine(0,118, 160,118, fgColour);
+      tft.drawLine(0,118, 160, 118, fgColour);
       tft.setCursor(0, 120);
+      Serial.print("modestring length: ");
+      Serial.println(sizeof(ModesStrings));
+      tft.print("|");
+      for (int i=0; i < 5; i++)
+      {
+        if (i == modePos)
+        {
+          tft.setTextColor(bgColour, fgColour);
+          tft.print(ModesStrings[i]);
+          tft.setTextColor(fgColour, bgColour);
+        }
+        else
+        {
+          tft.print(ModesStrings[i]);
+        }
+        tft.print("|");
+      }
+      /*
       for (int i = 0; i < sizeof(statusInfo.buttonLabels) - 1; i++)
       {
         tft.print(statusInfo.buttonLabels[i]);
       }
+      */
     }
     statusInfo.Update = false;
   }
@@ -1225,15 +1133,6 @@ void changeTitle(byte string)
   statusInfo.Update = true;
 }
 
-void changeButtonLabels(byte string)
-{
-  localisation[string].toCharArray(statusInfo.buttonLabels, LABELS_BUFFER_SIZE);
-  for (int i = localisation[string].length(); i < LABELS_BUFFER_SIZE - 1; i++)
-  {
-    statusInfo.buttonLabels[i] = ' ';
-  }
-  statusInfo.Update = true;
-}
 
 
 void buildIcons()
@@ -1310,12 +1209,10 @@ void buildIcons()
   settingIcons[3].title = S_SETTINGS3;
   settingIcons[3].Mode = SHOWADMINPW;
 
-  byte x;
-  byte y;
   byte c = 0;
-  for (y=0; y < 3; y++)
+  for (byte y=0; y < 3; y++)
   {
-    for (x=0; x < 4; x++)
+    for (byte x=0; x < 4; x++)
     {
       //colourIcons[c] = Icon(65+(x*25), 15+(y*25));
       colourIcons[c].x = 65 + (x*20);
