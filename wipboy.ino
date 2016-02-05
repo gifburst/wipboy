@@ -27,10 +27,12 @@
  *
  * GPIO ADC          Control knob
  * GPIO 0            Button1
- * GPIO 4            Button2
- * GPIO 5            Button3
+ *          
+ *           
  *
  *  Free IOs:
+ *  GPIO4
+ *  GPIO5
  *  GPI01   (maybe if we get OTA working) (use as I2C for radio, yeah!)
  *  GPIO3   (maybe if we get OTA working) (use as I2C for radio, yeah!)
  *  GPIO15  (will probably use for LED backlight)
@@ -46,8 +48,8 @@
 // ------------------------
 // screen
 #define TFT_CS     151 // The CS is tied to gnd and
-#define TFT_RST    150 // the RST is tied to the ESP's RST.  It's easier to just give the library fake pins
-#define TFT_DC     2   // than to edit the library.
+#define TFT_RST    150 // the RST is tied to the ESP's RST.  It's easier to just give the library 
+#define TFT_DC     2   // fake pins than to edit the library.
 #define TFT_BACKLIGHT 47  // TODO: wire backlight when we get the transitors come in
 
 uint16_t fgColour = 0x6D45;
@@ -64,7 +66,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 // copying/pasting.
 
 #define ADMIN_PW "12345"
-char WIFI_PW[] = "asdf";
+char WIFI_PW[] = "12345";
 
 const byte        DNS_PORT = 53;
 IPAddress         apIP(10, 10, 10, 1);
@@ -83,8 +85,8 @@ String homepageHTML = "<html><head></head><body>Nothing here at the moment.  Com
 // per knob.
 Slider knob = Slider(A0, 4, 24);
 Button b1 = Button(0, true);
-Button b2 = Button(4, true);
-Button b3 = Button(5, true);
+// Button b2 = Button(4, true);
+// Button b3 = Button(5, true);
 
 
 // ------------------------
@@ -127,7 +129,7 @@ byte lastSelected = 0;
 byte state = STOPPED;
 int stateDelay = 0;   // stateDelay is a counter in case we need to pause for a bit
 byte Mode = STOPPED;
-
+byte modePos = 0;
 
 
 // ------------------------
@@ -170,13 +172,36 @@ void setup()
 
   dnsServer.start(DNS_PORT, "*", apIP);
 
-  webServer.onNotFound([]()
-  {
-    checkWebRequest();
+  webServer.onNotFound([]() {
     webServer.send(200, "text/html", homepageHTML);
   });
   webServer.begin();
 
+
+  // /msg is when a connected phone asks for the messaging screen or tries to send
+  // /admin is to allow a phone to log in.  We then need to record the phone's IP
+  //   and autoserve them with the password
+  webServer.on("/login", []()
+  {
+    serveHomepage(false);
+  });
+  webServer.on("/msg", []()
+  {
+    handleWebMsg();
+  
+  });
+
+  webServer.on("/admin", []()
+  {
+    handleWebAdmin();
+    
+  });
+
+  webServer.on("/cfg", []()
+  {
+    handleWebAdmin();
+    
+  });
 
   // ------------------------
   // screen
@@ -199,23 +224,15 @@ void setup()
   buildIcons();
   
   // Setup complete.  Load menu
-  Mode = STATUS;
   setMenuState();
+  modePos = knob.getPos();
+  changeMode(ModesRef[knob.getPos()]);
+  
 }
 
 
 
-/*
- * if state == MENUSTATE // This state is when they choose the menu.  check the knob, change if need be
- *  if knob.changed
- *    changemode(newMode) // this will run the "starting" section of the mode.  which will then drop itself back into MENUSTATE probably
- *  // if it's not menustate, we're still running whatever mode we like, and it can manage on its own then toggle back into menustate when it's done updating
- * 
- * |------------------------|
- * STATS|Trkr|Msgs|CFG|Radio
- */
 
-byte modePos = 0;
 void loop()
 {
   backgroundUpdate();
@@ -505,7 +522,6 @@ void runNodeChooser()
     if (b1.isPressed() == 1)
     {
       setTargetInfo(knob.getPos());
-      targetting = true;
       changeMode(TRACKER);
     }    
   }
@@ -530,6 +546,7 @@ void setTargetInfo(int t)
   while (connecting)
   {
     delay(250);
+    tft.print('.');
     if (WiFi.status() == WL_CONNECTED)
     {
       connecting = false;
@@ -550,6 +567,7 @@ void setTargetInfo(int t)
       tft.print(" Lock Timeout ");      
       delay(1000);
       connecting = false;
+      targetting = false;
     } 
   }
 }
@@ -1008,6 +1026,7 @@ void backgroundUpdate()
 // handle all the coordination between smartphones/other wipboys
 // and this one.  They'll all pass info to each other via web
 // requests.  Why? Because it's easy.
+
 void checkWebRequest()
 {
   if (webServer.hasArg("mypassword"))
@@ -1025,6 +1044,40 @@ void checkWebRequest()
 
   }
 }
+
+
+void handleWebMsg()
+{
+  
+}
+
+void handleWebAdmin()
+{
+  if (webServer.hasArg("mypassword"))
+  {
+    if (webServer.arg("mypassword") == ADMIN_PW)
+    {
+      // Authenticated. They posted back.
+      // Return a login version of the main page
+      serveHomepage(true);
+    }
+    else
+    {
+      serveAdminpage();
+    }
+  }
+}
+
+void serveAdminpage()
+{
+  
+}
+
+void serveHomepage(bool admin)
+{
+  
+}
+
 
 
 // statusBarUpdate()
