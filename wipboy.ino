@@ -21,8 +21,8 @@
  * ESP8266-12        HY-1.8 SPI
  * REST              Pin 06 (RESET)
  * GPIO2             Pin 07 (A0)
- * GPIO13 (HSPID)    Pin 08 (SDA)
- * GPIO14 (HSPICLK)  Pin 09 (SCK)
+ * GPIO13 (MOSI)     Pin 08 (SDA)
+ * GPIO14 (CLK)      Pin 09 (SCK)
  * GND (HSPICS)      Pin 10 (CS)
  *
  * GPIO ADC          Control knob
@@ -39,6 +39,27 @@
  *  GPIO16  (will probably use for buzzer or sleep mode)
  *  GPIO12  (SPI IN ONLY: can have an SPI MISO here, though it won't have a MOSI.
  *                        example: RFID reader)
+ *                        
+ *                        
+ * 12e proposal                       
+ * Connections
+ * -------------
+ * GPIO ADC:Control knob
+ * GPIO12:  MISO on RFID
+ * GPIO13:  MOSI on LCD (and RFID if that doesn't work)
+ * GPIO14:  CLK on LCD, RFID
+ * GPIO15:  pulldown resistor to ground. button
+ * RST:     reset on LCD, RFID
+ * VCC:     LCD, RFID, control knob, button
+ * GND:     LCD, RFID, LCD CS, RFID SDA, control knob, pulldown resistor, toggle switch to GPIO2
+ * 
+ * 
+ * Free pins
+ * ---------------
+ * GPIO1
+ * GPIO3
+ * GPIO4
+ * GPIO5
   */
 
 
@@ -48,8 +69,8 @@
 // ------------------------
 // screen
 #define TFT_CS     151 // The CS is tied to gnd and
-#define TFT_RST    150 // the RST is tied to the ESP's RST.  It's easier to just give the library 
-#define TFT_DC     2   // fake pins than to edit the library.
+#define TFT_RST    150 // the RST is tied to the ESP's RST.  It's easier to just give the library fake pins than to edit the library.
+#define TFT_DC     2   // A0 on the screen
 #define TFT_BACKLIGHT 47  // TODO: wire backlight when we get the transitors come in
 
 uint16_t fgColour = 0x6D45;
@@ -73,11 +94,14 @@ IPAddress         apIP(10, 10, 10, 1);
 DNSServer         dnsServer;
 ESP8266WebServer  webServer(80);
 
+WiFiClient client;
+
 String homepageHTML = "<html><head></head><body>Nothing here at the moment.  Coming soon: phone sync'ing</body></html>";
-
-
-
-
+String HTMLHead = "<html><head><title>Wip-boy Remote!</title><style type=text/css>body{background-color:#000;font-family:Monospace,Lucida Console}.mainBody{border-radius:15px;border:2px solid #59955c;float:left;background-color:#030;color:#fff;background:-webkit-gradient(radial,center center,10,center center,900,from(#39652c),to(#3e4f63))}.borderz{border-radius:15px;border:5px ridge #c9decb}.borderz2{border-radius:11px;border:4px groove #93bf96}.title{font-weight:700;float:left;padding-right:5px}.hline{padding-right:5px;padding-left:5px}.hline:first-of-type{width:5%;float:left}p{padding-left:15px}.entryForm{width:200px;border:3px ridge #c9decb;padding:5px;border-radius:10px}</style><body><div class=main><div class=mainBody><div class=borderz><div class=borderz2><div class=hline><hr></div><div class=title>";
+String HTMLMsgBody1 = "</div><div class=hline><hr></div><br><p>Welcome, vault dweller. Because of the apocalypse, internet and cell phone service is no longer available.<br><br>But fear not! With this interface and your standard-issue Wip-Boy you can again reach out to talk to someone! Just choose your recipient, type your message, and they will receive it on their Wip-boy (assuming they are in range).</p><div class=entryForm><form action=wipboy.com/post method=POST><select name=Target>";
+String HTMLMsgBody2 = "</select><br><input name=message maxlength=140> <input type=hidden name=passkey value=";
+String HTMLMsgBody3 = "><input type=submit value=Send></form></div></div></div></div></div></body></html>";
+String HTMLLoginBody1 = "</div><div class=hline><hr></div><p>Type in the password in your Wip-boy's CFG or STATS window to log in.</p><p><form action=login method=POST><input name=passkey maxlength=8></form></p></div></div></div></div></body></html>";
 // ------------------------
 // buttons/controls
 // TODO: update the Slider object to take min/max values
@@ -106,6 +130,8 @@ typedef struct
   bool msgs = false;
   char title[TITLE_BUFFER_SIZE];
   char buttonLabels[LABELS_BUFFER_SIZE];
+  bool buzzer = true;
+  int buzzerDelay = 0;
 } StatusInfo;
 
 StatusInfo statusInfo = StatusInfo{};
@@ -126,7 +152,7 @@ byte lastSelected = 0;
 
 // ------------------------
 // Modes and States
-byte state = STOPPED;
+byte State = STOPPED;
 int stateDelay = 0;   // stateDelay is a counter in case we need to pause for a bit
 byte Mode = STOPPED;
 byte modePos = 0;
@@ -156,24 +182,28 @@ byte targetCursor;
 
 Icon selectionIcon = Icon(10,10); // This is so we have a simple way of rendering a selection box
 
+
+
 // =======================================
 // Setup
 void setup()
 {
   Mode = STARTING;
-  state = STARTING;
+  State = STARTING;
   Serial.begin(115200);
 
+  pinMode(15, OUTPUT);
   // ------------------------
   // webserver
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-  WiFi.softAP("Target 1425");
+  WiFi.softAP("Target1425");
 
   dnsServer.start(DNS_PORT, "*", apIP);
 
   webServer.onNotFound([]() {
-    webServer.send(200, "text/html", homepageHTML);
+    //webServer.send(200, "text/html", homepageHTML);
+    serveHomepage();
   });
   webServer.begin();
 
@@ -181,9 +211,10 @@ void setup()
   // /msg is when a connected phone asks for the messaging screen or tries to send
   // /admin is to allow a phone to log in.  We then need to record the phone's IP
   //   and autoserve them with the password
+  
   webServer.on("/login", []()
   {
-    serveHomepage(false);
+    serveHomepage();
   });
   webServer.on("/msg", []()
   {
@@ -191,18 +222,7 @@ void setup()
   
   });
 
-  webServer.on("/admin", []()
-  {
-    handleWebAdmin();
-    
-  });
-
-  webServer.on("/cfg", []()
-  {
-    handleWebAdmin();
-    
-  });
-
+  
   // ------------------------
   // screen
 
@@ -238,101 +258,38 @@ void loop()
   backgroundUpdate();
   statusBarUpdate();
 
-  if (state == MENUSTATE)
+
+  if (State == MENUSTATE)
   {
     if (knob.hasChanged())
     {
+      statusInfo.buzzerDelay = 1;
       changeMode(ModesRef[knob.getPos()]);
       modePos = knob.getPos();
       statusInfo.Update = true;
     }
   }
 
-  switch (Mode) // you know, this didn't give me anything better than the if statements in terms of space saving.
-  {             // I'm going to convert it back.
-    case TRACKER:
-      runTracker();
-    break;
-    case MESSENGER:
-      runMessenger();
-    break;
-    case STATUS:
-      runStats();
-    break;
-    case SETTINGS:
-      runSettings();
-    break;
-    case ADJUSTFGCOLOUR:
-      runFGColour();
-    break;
-    case ADJUSTBGCOLOUR:
-      runBGColour();
-    break;
-    case NODECHOOSER:
-      runNodeChooser();
-    break;
-    case SHOWADMINPW:
-      runAdminPW();
-    break;
-  }
-
-}
-// =======================================
-// Loop
-void oldloop()
-{
-  // run the background updater.  This keeps everything
-  // ticking along without clogging the loop() function
-  // with code
-  backgroundUpdate();
-
-  // run the status bar updater.  This checks to see if
-  // we need to redraw the status bar.  It means we don't
-  // waste a lot of cycles (and energy) redrawing the screen
-  // every tick
-  statusBarUpdate();
-
-
-  // check which mode to run.  This could probably be cleaner
-  // if we used a case switch statement thingy, but I just
-  // wanted the functionality so it got a quick if tree instead.
-  // TODO: change to case/switch statement thingy
-  if (Mode == TRACKER)
-  {
+  if (Mode==TRACKER)
     runTracker();
-  }
-  else if (Mode == MESSENGER)
-  {
+  else if (Mode==MESSENGER)
     runMessenger();
-  }
-  else if (Mode == SETTINGS)
-  {
-    runSettings();
-  }
-  else if (Mode == STATUS)
-  {
+  else if (Mode==STATUS)
     runStats();
-  }
-  else if (Mode == ADJUSTFGCOLOUR)
-  {
+  else if (Mode==SETTINGS)
+    runSettings();
+  else if (Mode==ADJUSTFGCOLOUR)
     runFGColour();
-  }
-  else if (Mode == ADJUSTBGCOLOUR)
-  {
+  else if (Mode==NODECHOOSER)
     runBGColour();
-  }  
-  else if (Mode == NODECHOOSER)
-  {
-    runNodeChooser();
-  }
-  else if (Mode == SHOWADMINPW)
-  {
+  else if (Mode==SHOWADMINPW)
     runAdminPW();
-  }
-  else
-    mainMenu();
-}
+  else if (Mode==SETBUZZER)
+    runSetBuzzer();
+    
 
+
+}
 
 
 
@@ -342,68 +299,9 @@ void oldloop()
 // Modes
 //=========================================
 
-// mainMenu()
-// This mode displays the icons the player will choose to enter
-// the other modes.  It uses the knob to select and a button to
-// execute the mode change.
-
-void mainMenu()
-{
-  // draw the menu icons when we first load in or
-  // if we have to update the screen
-  if (state == STARTING)
-  {
-    knob.setRange(4);
-    lastSelected = knob.getPos();
-    state = UPDATE;
-    changeTitle(menuIcons[knob.getPos()].title);
-    statusInfo.Update = true;
-    tft.drawBitmap(80,15, g_logo, 72, 40, fgColour);
-    drawMenu();
-  }
-
-  // We only update if the display has changed somehow. stops
-  // wasted cpus and flickering
-  else if (state == UPDATE)
-  {
-    state = RUNNING;
-    //drawMenu();
-    drawSelectionBox(menuIcons[knob.getPos()]);
-  }
-
-
-  else
-  {
-    // check if the knob has changed, if it has then clear the
-    // current box and set the title to the selected
-    //tft.setCursor(120, 100);
-    //tft.print(knob.getRawPos());
-    //tft.print("   ");
-    if (knob.hasChanged())
-    {
-      Serial.println("knob changed");
-      clearSelectionBox(menuIcons[lastSelected]);
-      lastSelected = knob.getPos();
-      changeTitle(menuIcons[knob.getPos()].title);
-      statusInfo.Update = true;
-      state = UPDATE;
-    }
-    // check if the select button has been pressed. if so,
-    // change the Mode
-    if (b1.isPressed() == 1)
-    {
-      changeMode(menuIcons[lastSelected].Mode);
-    }
-  }
-}
-
-
-// =======================================
-//=========================================
-//=========================================
 int scanForNodes()
 {
-  Serial.println("starting scan");
+  ////Serial.println("starting scan");
   long delayTest = millis();
   int numSsids = WiFi.scanNetworks();
   if (numSsids > 64)
@@ -418,16 +316,16 @@ int scanForNodes()
       networkNodes[i].rssi = WiFi.RSSI(i);
     }
   }
-  Serial.println("finished");
-  Serial.println(millis() - delayTest);
+  //Serial.println("finished");
+  //Serial.println(millis() - delayTest);
   return numSsids;
 }
 
 void runNodeChooser()
 {
-  if (state == STARTING)
+  if (State == STARTING)
   {
-    state = UPDATE;
+    State = UPDATE;
     changeTitle(S_CHOOSENODE);
    
     // populate the list
@@ -454,7 +352,7 @@ void runNodeChooser()
     }
   }
 
-  else if (state == UPDATE)
+  else if (State == UPDATE)
   {
     // redraw the list, from the offset to offset+9
     // draw the selection box (offset Y + (cursor*10))
@@ -474,13 +372,14 @@ void runNodeChooser()
     }
 
     
-    state = RUNNING; 
+    State = RUNNING; 
   }
 
-  else if (state == RUNNING)
+  else if (State == RUNNING)
   {
     if (knob.hasChanged())
     {      
+      statusInfo.buzzerDelay = 1;
       clearSelectionBox(selectionIcon);
       //if changed
       //  clear selectionbox
@@ -488,11 +387,11 @@ void runNodeChooser()
       //  if change < 0:
       //    cursor = 0
       //    offset = knobpos
-      //    state = update
+      //    State = update
       //  else if change > 9
       //    cursor = 9
       //    offset = knobpos - 9
-      //    state = update
+      //    State = update
       //  else
       //    draw selection box (offset Y + (cursor*10)
 
@@ -501,19 +400,19 @@ void runNodeChooser()
       {
         targetCursor = 0;
         targetOffset = knob.getPos();
-        state = UPDATE;
+        State = UPDATE;
       }
       else if (change > 9)
       {
         targetCursor = 9;
         targetOffset = knob.getPos() - 9;
-        state = UPDATE;
+        State = UPDATE;
       }
       else
       {
         targetCursor = change;
         selectionIcon.y = 10 + (targetCursor * 10);
-        Serial.println("runNodeChooser running");
+        //Serial.println("runNodeChooser running");
         drawSelectionBox(selectionIcon);
         
       }
@@ -572,12 +471,7 @@ void setTargetInfo(int t)
   }
 }
 
-void setMenuState()
-{
-  state = MENUSTATE;
-  knob.setRange(5);
-  lastSelected = knob.getPos();
-}
+
 
 void updateTargetInfo()
 {
@@ -599,9 +493,9 @@ void updateTargetInfo()
 
 void runTracker()
 {
-  if (state == STARTING)
+  if (State == STARTING)
   {
-    state = UPDATE;
+    State = UPDATE;
     changeTitle(S_TRACKER);
 
     statusInfo.Update = true;
@@ -617,7 +511,7 @@ void runTracker()
 
 
 
-  else if (state == UPDATE)
+  else if (State == UPDATE)
   {
     //if targetting
     //  updateTargetInfo
@@ -641,7 +535,6 @@ void runTracker()
         tft.print("TARGET LOST!");
         targetting = false;
         WiFi.disconnect();
-        //WiFiClient.disconnect();
       }
       else if (lastUpdate > 3000)
       { // lost the target temporarily
@@ -664,13 +557,13 @@ void runTracker()
 
 
 
-  else if (state == MENUSTATE)
+  else if (State == MENUSTATE)
   {
     if (targetting)
     {
       stateDelay--;
       if (stateDelay <=0)
-        state = UPDATE;
+        State = UPDATE;
     }
     
     if (b1.isPressed() == 1)
@@ -686,7 +579,7 @@ void runTracker()
 //=========================================
 void runStats()
 {
-  if (state == STARTING)
+  if (State == STARTING)
   {
     tft.setCursor(10, 20);
     tft.print("Feature not enabled");
@@ -698,12 +591,12 @@ void runStats()
     statusInfo.Update = true;
     tft.drawBitmap(64, 30, g_stats, 32, 76, fgColour);
   }
-  else if (state == MENUSTATE)
+  else if (State == MENUSTATE)
   {
 
     if (b1.isPressed() == 1)
     {
-      state = SHUTDOWN;
+      State = SHUTDOWN;
     }
   }
 }
@@ -711,6 +604,12 @@ void runStats()
 
 
 //=========================================
+void setMenuState()
+{
+  State = MENUSTATE;
+  knob.setRange(5);
+  lastSelected = knob.getPos();
+}
 //=========================================
 void runSettings()
 {
@@ -739,9 +638,8 @@ void runSettings()
   // if adminPassword
   //  print to screen admin password
   
-  if (state == STARTING)
+  if (State == STARTING)
   {
-    Serial.println("settings starting");
     setMenuState();
     changeTitle(S_SETTINGS);
 
@@ -758,8 +656,8 @@ void runSettings()
       tft.print(localisation[settingIcons[i].title]);
     }
   }
-
-  else if (state == MENUSTATE)
+  
+  else if (State == MENUSTATE)
   {
     if (b1.isPressed() == 1)
     {
@@ -767,11 +665,11 @@ void runSettings()
       knob.setRange(4);
       lastSelected = knob.getPos();
       drawSelectionBox(settingIcons[lastSelected]);
-      state = INMODE;
+      State = INMODE;
     }
   }
   
-  else if (state == INMODE)
+  else if (State == INMODE)
   {
     // check the knob
     // if hasChanged()
@@ -780,6 +678,7 @@ void runSettings()
     //  draw selection box
     if (knob.hasChanged())
     {
+      statusInfo.buzzerDelay = 1;
       clearSelectionBox(settingIcons[lastSelected]);
       lastSelected = knob.getPos();
       drawSelectionBox(settingIcons[lastSelected]);
@@ -787,24 +686,39 @@ void runSettings()
     
     else if (b1.isPressed()==1)
     {
-      Serial.println("b1 pressed");
+      //Serial.println("b1 pressed");
       Mode = settingIcons[lastSelected].Mode;
       // I'm not using changeMode() because I don't want to undraw the settings window
-      state = STARTING;
+      State = STARTING;
     }
   }
+  
 }
 
 
 void runAdminPW()
 {
-  if (state == STARTING)
+  tft.setCursor(80, 100);
+  tft.print(ADMIN_PW);
+  setMenuState();
+  Mode = SETTINGS;
+}
+
+void runSetBuzzer()
+{
+  tft.setCursor(80, 100);
+  if (statusInfo.buzzer)
   {
-    tft.setCursor(80, 100);
-    tft.print(ADMIN_PW);
-    setMenuState();
-    Mode = SETTINGS;
+    statusInfo.buzzer = false;
+    tft.print(localisation[S_SOUNDDISABLED]);
   }
+  else
+  {
+    statusInfo.buzzer = true;
+    tft.print(localisation[S_SOUNDENABLED]);
+  }
+  setMenuState();
+  Mode = SETTINGS;
 }
 
 void runFGColour()
@@ -812,9 +726,9 @@ void runFGColour()
   // clear the draw box area
   // draw the selections
   // draw the selection box
-  if (state == STARTING)
+  if (State == STARTING)
   {
-    state = RUNNING;
+    State = RUNNING;
     tft.fillRect(76,10,152,109,bgColour);
 
     for (byte i=0; i < 12; i++)
@@ -830,7 +744,7 @@ void runFGColour()
     knob.setRange(12);
     lastSelected = knob.getPos();
 
-    Serial.println("runFGColour starting");
+    //Serial.println("runFGColour starting");
     drawSelectionBox(colourIcons[lastSelected]);
   }
   
@@ -838,10 +752,11 @@ void runFGColour()
   // if moved
   //  clear selection box
   //  draw the selection box
-  else if (state == RUNNING)
+  else if (State == RUNNING)
   {
     if (knob.hasChanged())
     {
+      statusInfo.buzzerDelay = 1;
       clearSelectionBox(colourIcons[lastSelected]);
       lastSelected = knob.getPos();
       drawSelectionBox(colourIcons[lastSelected]);
@@ -865,9 +780,9 @@ void runBGColour()
   // clear the draw box area
   // draw the selections
   // draw the selection box
-  if (state == STARTING)
+  if (State == STARTING)
   {
-    state = RUNNING;
+    State = RUNNING;
     tft.fillRect(76,10,152,109,bgColour);
 
     for (byte i=0; i < 12; i++)
@@ -890,13 +805,14 @@ void runBGColour()
   // if moved
   //  clear selection box
   //  draw the selection box
-  else if (state == RUNNING)
+  else if (State == RUNNING)
   {
     if (knob.hasChanged())
     {
+      statusInfo.buzzerDelay = 1;
       clearSelectionBox(colourIcons[lastSelected]);
       lastSelected = knob.getPos();
-      Serial.println("runBGColour running");
+      //Serial.println("runBGColour running");
       drawSelectionBox(colourIcons[lastSelected]);
     }
     
@@ -917,7 +833,7 @@ void runBGColour()
 //=========================================
 void runMessenger()
 {
-  if (state == STARTING)
+  if (State == STARTING)
   {
     tft.setCursor(10, 20);
     tft.print("Feature not enabled");
@@ -952,11 +868,6 @@ void drawMenu()
 
 void drawSelectionBox(Icon icon)
 {
-  Serial.println("in drawSelectionBox");
-  Serial.println(icon.x);
-  Serial.println(icon.y);
-  Serial.println(icon.sbw);
-  Serial.println(icon.sbh);
   tft.drawRoundRect(icon.x, icon.y, icon.sbw, icon.sbh, 1, fgColour);
 
 }
@@ -1001,7 +912,7 @@ void changeMode(byte newMode)
   
   tft.fillScreen(bgColour);
   Mode = newMode;
-  state = STARTING;
+  State = STARTING;
 }
 
 
@@ -1011,39 +922,30 @@ void backgroundUpdate()
 {
   dnsServer.processNextRequest();
   webServer.handleClient();
+  delay(100); // a delay of 1ms will allow the wifi AP half to execute itself.
 
   // TODO: if buzzer is active, count down the delay on it.
   // if the delay reaches 0 then shut the buzzer down.
   // (TBH it may be more of a "clicker" than a "buzzer". we
   //  can't really manage the microseconds to make it buzz.
   //  This may be a motor instead)
-}
 
-
-
-// checkWebRequest()
-// This is a dummy function ATM, but eventually this will
-// handle all the coordination between smartphones/other wipboys
-// and this one.  They'll all pass info to each other via web
-// requests.  Why? Because it's easy.
-
-void checkWebRequest()
-{
-  if (webServer.hasArg("mypassword"))
-  { // change "mypassword" to test against the internal password in Settings
-    // only perform actions if the password is supplied
-
-    // ...
-    // do other things based on the intput. This would be where
-    // we also receive commands to send messages or change settings
-  }
-  else if (webServer.hasArg("carrierPassword"))
-  { // this is the shared password between all the devices. For now
-    // we will set this manually.  Eventually we'll have a central
-    // hub maybe, or a way of mesh sharing this.
-
+  if (statusInfo.buzzer)
+  {
+    if (statusInfo.buzzerDelay > 0)
+    {
+      statusInfo.buzzerDelay -= 1;
+      digitalWrite(15, HIGH);
+    }
+    else
+    {
+      digitalWrite(15, LOW);
+    }
   }
 }
+
+
+
 
 
 void handleWebMsg()
@@ -1051,34 +953,96 @@ void handleWebMsg()
   
 }
 
-void handleWebAdmin()
+
+void serveHomepage()
 {
-  if (webServer.hasArg("mypassword"))
+  if (webServer.hasArg("passkey"))
   {
-    if (webServer.arg("mypassword") == ADMIN_PW)
+    if (webServer.arg("passkey") == ADMIN_PW)
     {
-      // Authenticated. They posted back.
-      // Return a login version of the main page
-      serveHomepage(true);
-    }
+      // Authenticated.  Check if they're posting a msg or not
+      if (webServer.hasArg("message"))
+      {  // they've POSTed a msg to send. handle it
+        handleMsg();
+      }
+      webServer.send(200, "text/html", HTMLHead + "messenger" + HTMLMsgBody1 + "<option value='woodnet'>Woodnet</option>" + HTMLMsgBody2 + "\""+ADMIN_PW+"\""+HTMLMsgBody3);    }
     else
     {
-      serveAdminpage();
+      webServer.send(200, "text/html", HTMLHead + "login" + HTMLLoginBody1);
     }
+  }  
+  else
+  {
+    webServer.send(200, "text/html", HTMLHead + "login" + HTMLLoginBody1);
+  }
+  
+}
+
+
+
+void handleMsg()
+{
+  
+  if (webServer.hasArg("Target"))
+  {
+    // attempt to connect to target network
+    // if we connect
+    //  (optional: clear out the screen maybe?)
+    //  GET or POST the message
+    //  disconnect
+    
+    // if we are already tracking something we need to break it. We'll pick it back up after
+    if (targetting)
+      WiFi.disconnect();
+    
+    tft.setCursor(145, 0);
+    tft.print("S!");
+    Serial.print("connecting to ");
+    Serial.println(webServer.arg("Target"));
+    char buf[31];
+    webServer.arg("Target").toCharArray(buf, 31);  // there's gotta be a better way to do this
+    WiFi.begin(buf, WIFI_PW);
+
+    bool connecting = true;
+    while (connecting)
+    {
+      delay(250);
+      if (WiFi.status() == WL_CONNECTED)
+      {
+        Serial.println("connected, sending");
+        // We've connected.  Send message
+        if (client.connect("wipboy.com", 80))
+        {
+          client.println("GET /serviceMsg?msg=hello HTTP/1.1");
+          client.println("Host: wipboy.com");
+          client.println("Connection: close");
+          client.println();
+          delay(1000);
+          client.stop();
+          Serial.println("Sent! Wow");
+        }
+        
+        // and disconnect
+        WiFi.disconnect();
+        
+      }
+      
+      else if (WiFi.status() == WL_CONNECT_FAILED || WiFi.status() == WL_CONNECTION_LOST)
+      {
+        tft.setCursor(145,0);
+        tft.print("s*");
+        connecting = false;
+        delay(1000);
+      }
+    }
+    if (targetting) // restore target lock
+    {
+      char buf[31];
+      target.ssid.toCharArray(buf, 31);  // there's gotta be a better way to do this
+      WiFi.begin(buf, WIFI_PW);
+    } 
   }
 }
-
-void serveAdminpage()
-{
-  
-}
-
-void serveHomepage(bool admin)
-{
-  
-}
-
-
 
 // statusBarUpdate()
 // This function checks if the status bar needs to be re-rendered.
@@ -1121,9 +1085,8 @@ void statusBarUpdate()
     {
       tft.drawLine(0,118, 160, 118, fgColour);
       tft.setCursor(0, 120);
-      Serial.print("modestring length: ");
-      Serial.println(sizeof(ModesStrings));
-      tft.print("|");
+
+      tft.print(" ");
       for (int i=0; i < 5; i++)
       {
         if (i == modePos)
@@ -1136,7 +1099,7 @@ void statusBarUpdate()
         {
           tft.print(ModesStrings[i]);
         }
-        tft.print("|");
+        tft.print(" ");
       }
       /*
       for (int i = 0; i < sizeof(statusInfo.buttonLabels) - 1; i++)
@@ -1261,6 +1224,17 @@ void buildIcons()
   settingIcons[3].sbh = 10;
   settingIcons[3].title = S_SETTINGS3;
   settingIcons[3].Mode = SHOWADMINPW;
+  settingIcons[4].x = 0;
+  settingIcons[4].y = 55;
+  settingIcons[4].w = 62;
+  settingIcons[4].h = 10;
+  settingIcons[4].offsetX=1;
+  settingIcons[4].offsetY=1;
+  settingIcons[4].sbw = 62;
+  settingIcons[4].sbh = 10;
+  settingIcons[4].title = S_SETTINGS4;
+  settingIcons[4].Mode = SETBUZZER;
+
 
   byte c = 0;
   for (byte y=0; y < 3; y++)

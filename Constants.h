@@ -27,6 +27,9 @@ String localisation[] =
   "Target:",
   "Signal Str",
   "Select Node",
+  "Sound on/off",
+  "Sound Disabled",
+  "Sound Enabled",
 };
 
 // Yes, I'm aware defines are not constants.  I'll convert them over later.  We still have 26k of RAM atm, so we're not suffering yet
@@ -47,6 +50,9 @@ String localisation[] =
 #define S_TARGET 13
 #define S_TARGETSTRENGTH 14
 #define S_CHOOSENODE 15
+#define S_SETTINGS4 16
+#define S_SOUNDDISABLED 17
+#define S_SOUNDENABLED 18
 
 // ------------------------
 // icons, menu items, modes
@@ -68,6 +74,7 @@ String localisation[] =
 // mode is in, from starting to running to needing update
 // to shutting down.
 
+//States
 #define STOPPED 0
 #define STARTING 1
 #define RUNNING 2
@@ -76,6 +83,7 @@ String localisation[] =
 #define MENUSTATE 5
 #define INMODE 6
 
+//Modes
 #define MAINMENU 102
 #define TRACKER 103
 #define MESSENGER 104
@@ -87,6 +95,7 @@ String localisation[] =
 #define SHOWADMINPW  110
 #define NODECHOOSER 111
 #define RADIO 106
+#define SETBUZZER 112
 
 byte ModesRef[] =
 {
