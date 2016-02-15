@@ -8,6 +8,7 @@
 #include <Adafruit_GFX.h>       // Core graphics library
 #include "./Adafruit_ST7735.h"  // Hardware-specific library - patched for esp
 #include <SPI.h>
+#include <MFRC522.h>
 // physical controls (because the regular arduino stuff sucks)
 #include "./Slider.h"
 #include "./Button.h"
@@ -16,6 +17,7 @@
 #include "./WipboyNode.h"
 #include "./Wipboy_Gfx.h"
 #include "./Constants.h"
+
 
 /*
  * ESP8266-12        HY-1.8 SPI
@@ -56,10 +58,12 @@
  * 
  * Free pins
  * ---------------
- * GPIO1
- * GPIO3
- * GPIO4
- * GPIO5
+ * GPIO 0
+ * GPIO 1
+ * GPIO 3
+ * GPIO 4
+ * GPIO 5
+ * GPIO16
   */
 
 
@@ -77,6 +81,11 @@ uint16_t fgColour = 0x6D45;
 uint16_t bgColour = ST7735_BLACK;
 
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+
+
+#define RFID_SS   16
+#define RFID_RST  4
+MFRC522 rfid = MFRC522(RFID_SS, RFID_RST);
 
 
 
@@ -182,6 +191,47 @@ byte targetCursor;
 
 Icon selectionIcon = Icon(10,10); // This is so we have a simple way of rendering a selection box
 
+/*
+String stageTags = 
+
+Quest quests[1] = {Quest()};
+
+quests[0].visible = true;
+quests[0].maxStage = 2;
+quests[0].stageTags = 
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // =======================================
@@ -192,6 +242,8 @@ void setup()
   State = STARTING;
   Serial.begin(115200);
 
+  SPI.begin();
+  
   pinMode(15, OUTPUT);
   // ------------------------
   // webserver
@@ -238,6 +290,10 @@ void setup()
   tft.setTextWrap(false);
 
 
+  // ------------------------
+  // rfid
+  rfid.PCD_Init();
+  
   // ------------------------
   // build the different icons.  doing this to move
   // spammy code to bottom
@@ -298,6 +354,37 @@ void loop()
 //=========================================
 // Modes
 //=========================================
+
+void runQuests()
+{
+
+}
+
+
+void checkRFID()
+{
+  if (rfid.PICC_IsNewCardPresent())
+  {
+    if (rfid.PICC_ReadCardSerial())
+    {
+      byte key[4];
+      for (int i=0; i < 4; i++)
+      {
+        key[i] = rfid.uid.uidByte[i];
+        Serial.print(key[i]);
+        Serial.print(' ');
+      }
+      Serial.println("");
+      rfid.PICC_HaltA();
+    }
+  }
+}
+
+
+
+
+
+
 
 int scanForNodes()
 {
@@ -924,6 +1011,8 @@ void backgroundUpdate()
   webServer.handleClient();
   delay(100); // a delay of 1ms will allow the wifi AP half to execute itself.
 
+  checkRFID();
+
   // TODO: if buzzer is active, count down the delay on it.
   // if the delay reaches 0 then shut the buzzer down.
   // (TBH it may be more of a "clicker" than a "buzzer". we
@@ -942,6 +1031,7 @@ void backgroundUpdate()
       digitalWrite(15, LOW);
     }
   }
+  
 }
 
 
@@ -1148,6 +1238,18 @@ void changeTitle(byte string)
   }
   statusInfo.Update = true;
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
