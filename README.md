@@ -1,7 +1,11 @@
 # wipboy
+
+www.wipboy.com
+
 My own Pip-Boy clone using the ESP8266, an ST7735, some buttons and a knob. Note: this is still very WIP (Hence the name).  Much of it is still unfinished.
 
 Planned features:
+
   1) CHEAP!  I want this to be less than $10 a device.  Why? Because of its second primary purpose.  
   
   2) Wifi beacon and tracking capabilities. We're going to try and run another game of "hunter/killer" at comicon, amongst a crowd of tens of thousands.  Building these should make it both cooler and easier than getting everyone's cell phones to work and using WN702s
