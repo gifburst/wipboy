@@ -1,15 +1,11 @@
-//import
-// 5th test
-// webserver
 #include <ESP8266WiFi.h>
 #include "./DNSServer.h"                  // Patched lib
 #include <ESP8266WebServer.h>
-// graphics
+
 #include <Adafruit_GFX.h>       // Core graphics library
 #include "./Adafruit_ST7735.h"  // Hardware-specific library - patched for esp
 #include <SPI.h>
 #include <MFRC522.h>
-// physical controls (because the regular arduino stuff sucks)
 #include "./Slider.h"
 #include "./Button.h"
 #include "./Icon.h"
@@ -18,64 +14,18 @@
 #include "./Wipboy_Gfx.h"
 #include "./Constants.h"
 
-
-/*
- * ESP8266-12        HY-1.8 SPI
- * REST              Pin 06 (RESET)
- * GPIO2             Pin 07 (A0)
- * GPIO13 (MOSI)     Pin 08 (SDA)
- * GPIO14 (CLK)      Pin 09 (SCK)
- * GND (HSPICS)      Pin 10 (CS)
- *
- * GPIO ADC          Control knob
- * GPIO 0            Button1
- *          
- *           
- *
- *  Free IOs:
- *  GPIO4
- *  GPIO5
- *  GPI01   (maybe if we get OTA working) (use as I2C for radio, yeah!)
- *  GPIO3   (maybe if we get OTA working) (use as I2C for radio, yeah!)
- *  GPIO15  (will probably use for LED backlight)
- *  GPIO16  (will probably use for buzzer or sleep mode)
- *  GPIO12  (SPI IN ONLY: can have an SPI MISO here, though it won't have a MOSI.
- *                        example: RFID reader)
- *                        
- *                        
- * 12e proposal                       
- * Connections
- * -------------
- * GPIO ADC:Control knob
- * GPIO12:  MISO on RFID
- * GPIO13:  MOSI on LCD (and RFID if that doesn't work)
- * GPIO14:  CLK on LCD, RFID
- * GPIO15:  pulldown resistor to ground. button
- * RST:     reset on LCD, RFID
- * VCC:     LCD, RFID, control knob, button
- * GND:     LCD, RFID, LCD CS, RFID SDA, control knob, pulldown resistor, toggle switch to GPIO2
- * 
- * 
- * Free pins
- * ---------------
- * GPIO 0
- * GPIO 1
- * GPIO 3
- * GPIO 4
- * GPIO 5
- * GPIO16
-  */
-
+#include "./Quest.h"
 
 // =======================================
 // Declare
 
-// ------------------------
+
+// ---------------------------------------------------
+// ---------------------------------------------------
 // screen
 #define TFT_CS     151 // The CS is tied to gnd and
 #define TFT_RST    150 // the RST is tied to the ESP's RST.  It's easier to just give the library fake pins than to edit the library.
-#define TFT_DC     2   // A0 on the screen
-#define TFT_BACKLIGHT 47  // TODO: wire backlight when we get the transitors come in
+#define TFT_DC     16   // A0 on the screen
 
 uint16_t fgColour = 0x6D45;
 uint16_t bgColour = ST7735_BLACK;
@@ -83,27 +33,15 @@ uint16_t bgColour = ST7735_BLACK;
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
 
-#define RFID_SS   16
-#define RFID_RST  4
-MFRC522 rfid = MFRC522(RFID_SS, RFID_RST);
-
-
-
-// ------------------------
-// webserver
-// This is the section for defining the webserver and dns server.
-// We can also add our HTML webpages in here as strings by
-// copying/pasting.
-
-#define ADMIN_PW "12345"
-char WIFI_PW[] = "12345";
+Quest Quests[] = {Quest(), Quest(), Quest()};
+// ---------------------------------------------------
+// ---------------------------------------------------
+//
 
 const byte        DNS_PORT = 53;
 IPAddress         apIP(10, 10, 10, 1);
 DNSServer         dnsServer;
 ESP8266WebServer  webServer(80);
-
-WiFiClient client;
 
 String homepageHTML = "<html><head></head><body>Nothing here at the moment.  Coming soon: phone sync'ing</body></html>";
 String HTMLHead = "<html><head><title>Wip-boy Remote!</title><style type=text/css>body{background-color:#000;font-family:Monospace,Lucida Console}.mainBody{border-radius:15px;border:2px solid #59955c;float:left;background-color:#030;color:#fff;background:-webkit-gradient(radial,center center,10,center center,900,from(#39652c),to(#3e4f63))}.borderz{border-radius:15px;border:5px ridge #c9decb}.borderz2{border-radius:11px;border:4px groove #93bf96}.title{font-weight:700;float:left;padding-right:5px}.hline{padding-right:5px;padding-left:5px}.hline:first-of-type{width:5%;float:left}p{padding-left:15px}.entryForm{width:200px;border:3px ridge #c9decb;padding:5px;border-radius:10px}</style><body><div class=main><div class=mainBody><div class=borderz><div class=borderz2><div class=hline><hr></div><div class=title>";
@@ -111,61 +49,6 @@ String HTMLMsgBody1 = "</div><div class=hline><hr></div><br><p>Welcome, vault dw
 String HTMLMsgBody2 = "</select><br><input name=message maxlength=140> <input type=hidden name=passkey value=";
 String HTMLMsgBody3 = "><input type=submit value=Send></form></div></div></div></div></div></body></html>";
 String HTMLLoginBody1 = "</div><div class=hline><hr></div><p>Type in the password in your Wip-boy's CFG or STATS window to log in.</p><p><form action=login method=POST><input name=passkey maxlength=8></form></p></div></div></div></div></body></html>";
-// ------------------------
-// buttons/controls
-// TODO: update the Slider object to take min/max values
-// and to report current raw value.  That way we can calibrate
-// per knob.
-Slider knob = Slider(A0, 4, 24);
-Button b1 = Button(0, true);
-// Button b2 = Button(4, true);
-// Button b3 = Button(5, true);
-
-
-// ------------------------
-// statusinfo
-// This is a struct we use to just organise all
-// the status info on the top and bottom of the
-// display.  In theory we could just use global
-// variables instead, but I wanted to experiment
-// with organising in structs instead.
-
-// TODO: implement the buzzer/motor status/timer stuffs
-typedef struct
-{
-  bool Update = true;
-  bool displayTop = true;
-  bool displayBottom = true;
-  bool msgs = false;
-  char title[TITLE_BUFFER_SIZE];
-  char buttonLabels[LABELS_BUFFER_SIZE];
-  bool buzzer = true;
-  int buzzerDelay = 0;
-} StatusInfo;
-
-StatusInfo statusInfo = StatusInfo{};
-
-
-
-// Ok, instantiating arrays of objects shouldn't be this hard.  This is just dumb.
-// TODO: fix this
-Icon menuIcons[4] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
-Icon settingIcons[4] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
-Icon colourIcons[12] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10),Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10),Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
-
-// This is so when we change the selection box we know what the
-// previous selected icon was. That way we can clear out the old
-// one.
-byte lastSelected = 0;
-
-
-// ------------------------
-// Modes and States
-byte State = STOPPED;
-int stateDelay = 0;   // stateDelay is a counter in case we need to pause for a bit
-byte Mode = STOPPED;
-byte modePos = 0;
-
 
 // ------------------------
 // This is just clearing enough memory to scan up to 64 networks.  Yeah, that's a lot.  
@@ -189,67 +72,120 @@ String strBuffer;  // these are used to draw the list to the screen.  I wanted i
 byte targetOffset; // using a trick from video gaming and cameras to do it.
 byte targetCursor;
 
+
+
+// ---------------------------------------------------
+// ---------------------------------------------------
+#define RFID_SS   4
+#define RFID_RST  5
+MFRC522 rfid = MFRC522(RFID_SS, RFID_RST);
+
+
+
+
+
+
+// ---------------------------------------------------
+// ---------------------------------------------------
+// buttons/controls
+// TODO: update the Slider object to take min/max values
+// and to report current raw value.  That way we can calibrate
+// per knob.
+Slider knob = Slider(A0, 4, 24);
+Button b1 = Button(0, true);
+
+
+
+
+
+
+
+
+// ---------------------------------------------------
+// ---------------------------------------------------
+// statusinfo
+// This is a struct we use to just organise all
+// the status info on the top and bottom of the
+// display.  In theory we could just use global
+// variables instead, but I wanted to experiment
+// with organising in structs. Though I should 
+// really move this to another library
+
+// TODO: implement the buzzer/motor status/timer stuffs
+typedef struct
+{
+  bool Update = true;
+  bool displayTop = true;
+  bool displayBottom = true;
+  bool msgs = false;
+  char title[TITLE_BUFFER_SIZE];
+  char buttonLabels[LABELS_BUFFER_SIZE];
+  bool buzzer = true;
+  int buzzerDelay = 0;
+  byte level = 1;
+  long xp = 0;
+} StatusInfo;
+
+StatusInfo statusInfo = StatusInfo{};
+
+
+// Ok, instantiating arrays of objects shouldn't be this hard.  This is just dumb.
+// TODO: fix this
+Icon menuIcons[4] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
+Icon settingIcons[4] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
+Icon colourIcons[12] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10),Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10),Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
+
+// This is so when we change the selection box we know what the
+// previous selected icon was. That way we can clear out the old
+// one.
+byte lastSelected = 0;
 Icon selectionIcon = Icon(10,10); // This is so we have a simple way of rendering a selection box
 
-/*
-String stageTags = 
 
-Quest quests[1] = {Quest()};
-
-quests[0].visible = true;
-quests[0].maxStage = 2;
-quests[0].stageTags = 
-
-*/
+// ---------------------------------------------------
+// ---------------------------------------------------
+// Modes and States
+byte State = STOPPED;
+int stateDelay = 0;   // stateDelay is a counter in case we need to pause for a bit
+byte Mode = STOPPED;
+byte modePos = 0;
 
 
 
 
+// ---------------------------------------------------
+// ---------------------------------------------------
+// ---------------------------------------------------
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// =======================================
-// Setup
-void setup()
+void setup() 
 {
   Mode = STARTING;
   State = STARTING;
   Serial.begin(115200);
 
   SPI.begin();
-  
-  pinMode(15, OUTPUT);
+
+  // ------------------------
+  // screen
+
+  //pinMode (TFT_BACKLIGHT, OUTPUT);
+  //digitalWrite(TFT_BACKLIGHT, HIGH);
+
+  tft.initR(INITR_BLACKTAB);   // initialize a ST7735S chip, black tab
+  tft.setRotation(3);
+  tft.fillScreen(bgColour);
+  tft.setTextColor(fgColour, bgColour);
+  tft.setTextWrap(false);
+
+  tft.setCursor(0,0);
+  tft.println("System initialised");
+
   // ------------------------
   // webserver
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
   WiFi.softAP("Target1425");
+  tft.println("Beacon activated");
 
   dnsServer.start(DNS_PORT, "*", apIP);
 
@@ -273,48 +209,39 @@ void setup()
     handleWebMsg();
   
   });
-
-  
-  // ------------------------
-  // screen
-
-  // TODO: wire a transitor up to a remaining pin and
-  // PWM the backlight
-  //pinMode (TFT_BACKLIGHT, OUTPUT);
-  //digitalWrite(TFT_BACKLIGHT, HIGH);
-
-  tft.initR(INITR_BLACKTAB);   // initialize a ST7735S chip, black tab
-  tft.setRotation(1);
-  tft.fillScreen(bgColour);
-  tft.setTextColor(fgColour, bgColour);
-  tft.setTextWrap(false);
-
+  tft.println("Wifi interface activated");
 
   // ------------------------
   // rfid
   rfid.PCD_Init();
-  
+  tft.println("Scanner activated");
   // ------------------------
   // build the different icons.  doing this to move
   // spammy code to bottom
   buildIcons();
+  tft.println("GUI constructed");
+
+  buildQuests();
+  tft.println("Quests added");
+
+  Serial.println("Setup complete");
+
+  pinMode(15, OUTPUT);
+  digitalWrite(15, HIGH);
+  delay(1);
+  digitalWrite(15, LOW);
   
   // Setup complete.  Load menu
   setMenuState();
   modePos = knob.getPos();
   changeMode(ModesRef[knob.getPos()]);
-  
 }
 
-
-
-
-void loop()
+void loop() 
 {
   backgroundUpdate();
   statusBarUpdate();
-
-
+  
   if (State == MENUSTATE)
   {
     if (knob.hasChanged())
@@ -328,64 +255,32 @@ void loop()
 
   if (Mode==TRACKER)
     runTracker();
-  else if (Mode==MESSENGER)
-    runMessenger();
+  else if (Mode==QUESTS)
+    runQuests();
   else if (Mode==STATUS)
     runStats();
   else if (Mode==SETTINGS)
     runSettings();
+  else if (Mode==RADIO)
+    runRadio();
   else if (Mode==ADJUSTFGCOLOUR)
     runFGColour();
-  else if (Mode==NODECHOOSER)
+  else if (Mode==ADJUSTBGCOLOUR)
     runBGColour();
   else if (Mode==SHOWADMINPW)
     runAdminPW();
-  else if (Mode==SETBUZZER)
-    runSetBuzzer();
-    
+  else if (Mode==NODECHOOSER)
+    runNodeChooser();
+  else if (Mode==QUESTNODECHOOSER)
+    runQuestNodeChooser();
 
 
 }
 
 
-
-
-
-//=========================================
-// Modes
-//=========================================
-
-void runQuests()
-{
-
-}
-
-
-void checkRFID()
-{
-  if (rfid.PICC_IsNewCardPresent())
-  {
-    if (rfid.PICC_ReadCardSerial())
-    {
-      byte key[4];
-      for (int i=0; i < 4; i++)
-      {
-        key[i] = rfid.uid.uidByte[i];
-        Serial.print(key[i]);
-        Serial.print(' ');
-      }
-      Serial.println("");
-      rfid.PICC_HaltA();
-    }
-  }
-}
-
-
-
-
-
-
-
+// ---------------------------------------------------
+// ---------------------------------------------------
+// ---------------------------------------------------
 int scanForNodes()
 {
   ////Serial.println("starting scan");
@@ -407,6 +302,12 @@ int scanForNodes()
   //Serial.println(millis() - delayTest);
   return numSsids;
 }
+
+
+
+
+
+
 
 void runNodeChooser()
 {
@@ -512,6 +413,15 @@ void runNodeChooser()
     }    
   }
 }
+
+
+
+
+
+
+
+
+
 
 
 void setTargetInfo(int t)
@@ -660,71 +570,276 @@ void runTracker()
   }
 }
 
+// ---------------------------------------------------
+// ---------------------------------------------------
+// ---------------------------------------------------
+void runQuestNodeChooser()
+{
+  // we can recycle the targetOffset/Cursor variables for this mode
+  if (State == STARTING)
+  {
+    State = UPDATE;
+    changeTitle(S_CHOOSENODE);
+   
+    // populate the list
+    // and set the knob to list length while we're at it
+    knob.setRange(sizeof(Quests));
+
+    // cursor = 0 - 9 (only space for 10 slots)
+    // offset = true list selection
+    // if knob.getPos() < 9:
+    //    offset = 0
+    //    cursor = knob.getPos()
+    //  else
+    //    cursor = 9
+    //    offset = knob.getPos() - 9
+    if (knob.getPos() < 9)
+    {
+      targetOffset = 0;
+      targetCursor = knob.getPos();
+    }
+    else
+    {
+      targetCursor = 9;
+      targetOffset = knob.getPos() - 9;
+    }
+  }
 
 
-//=========================================
-//=========================================
+
+  else if (State == UPDATE)
+  {
+    // redraw the list, from the offset to offset+9
+    // draw the selection box (offset Y + (cursor*10))
+    byte range;
+    if (knob.getRange() < 10)
+    {
+      range = knob.getRange();
+    }
+    else
+    {
+      range = 10;
+    }
+    
+    for (byte i = 0; i < range; i++)
+    {
+      tft.setCursor(1, 11+(i*10));
+      tft.print(QuestTitles[Quests[i].title]);
+    }    
+    State = RUNNING; 
+  }
+
+  
+
+  else if (State == RUNNING)
+  {
+    if (knob.hasChanged())
+    {      
+      clearSelectionBox(selectionIcon);
+
+      int change = knob.getPos() - targetOffset;
+      if (change < 0)
+      {
+        targetCursor = 0;
+        targetOffset = knob.getPos();
+        State = UPDATE;
+      }
+      else if (change > 9)
+      {
+        targetCursor = 9;
+        targetOffset = knob.getPos() - 9;
+        State = UPDATE;
+      }
+      else
+      {
+        targetCursor = change;
+        selectionIcon.y = 10 + (targetCursor * 10);
+        drawSelectionBox(selectionIcon);        
+      }
+    }
+    if (b1.isPressed() == 1)
+    {
+      // display the text for the quest
+      printPopupMsg(&QuestDescriptions[Quests[knob.getPos()].descriptions[Quests[knob.getPos()].stage]]);
+      // we're not using changeMode because we don't want to reset the State
+      // back to STARTING
+      //Mode = QUESTS;
+      //State = POPUPSTATE;
+      delay(2000);
+      setMenuState();
+    }    
+  }
+}
+
+
+
+
+void printPopupMsg(String* msg)
+{
+  byte startX = 20;
+  byte startY = 15;
+  byte endX = 140;
+  byte endY = 100;
+  tft.fillRoundRect(startX, startY, endX, endY, 3, bgColour);
+  tft.drawRoundRect(startX, startY, endX, endY, 3, fgColour);
+  tft.setCursor(startX+5, startY+5);
+  // we only have 18 characters per line.  We also only have 10 lines
+  byte y = 0;
+  byte counter = 0;
+  for (byte i=0; i < msg->length(); i++)
+  {
+    counter++;
+    if ((counter >= 18) || (msg->charAt(i) == '~'))
+    {
+      counter = 0;
+      y++;
+      tft.setCursor(startX+5, startY+5+(y*8));
+    }
+    tft.print(msg->charAt(i));
+  }
+}
+
+
+int printQuests()
+{
+  int y = 15;
+  int counter = 0;
+
+  for (int i=0; i<QUESTCOUNT; i++)
+  {
+    if (Quests[i].active && Quests[i].visible)
+    {
+      Quests[i].id = counter;
+      counter++;
+      // this bit is wrong. we need to do it like the wifi list.  We really need a GUI system. 
+      tft.setCursor(10, y);
+      tft.print(QuestTitles[Quests[i].title]);
+      y+=10;
+      if (counter >= 10)
+        break;
+    }
+    //else
+    //{
+    //}
+  }
+  return counter;
+}
+
+int qBase = 0;
+int qCursor = 0;
+
+int printQuestsNew(bool useBase)
+{
+  int counter = 0;
+  for (int i=0; i<QUESTCOUNT; i++)
+  {
+    if (Quests[i].active && Quests[i].visible)
+    {
+      // we can see it. add to the counter
+      Quests[i].id = counter;
+      counter++;
+    }
+  }
+  knob.setRange(counter);
+  
+}
+
+
+
+
+void runQuests()
+{
+    /*
+     * if starting
+     *  Run through the list of active quests
+     *  display those which are visible
+     * 
+     * if button pressed
+     *  reprint list
+     *  put selection box on quests
+     *  if pressed
+     *    print message
+     *    
+     * 
+     * 
+     * 
+     */
+    if (State == STARTING)
+    {
+      setMenuState();
+      changeTitle(S_QUESTS);
+      statusInfo.Update = true;
+  
+      printQuests();    
+    }
+
+    else if (State == MENUSTATE)
+    {
+      if (b1.isPressed() == 1)
+      {
+        /*
+         * if button pressed
+         *  reprint list
+         *  put selection box on quests
+         *  if pressed
+         *    print message
+         *    
+          */
+        knob.setRange(printQuests());
+        State = INMODE;
+      }
+    }
+
+    else if (State == POPUPSTATE)
+    {
+      // there's a message popped up. if the button is pressed clear and redraw the screen
+      
+      if (b1.isPressed() == 1)
+      {
+        changeMode(QUESTS);
+      }
+    }
+
+    else if (State == INMODE)
+    {
+    if (b1.isPressed() == 1)
+      {
+        changeMode(QUESTNODECHOOSER);
+      }      
+    }    
+}
+
+
+// ---------------------------------------------------
+// ---------------------------------------------------
+// ---------------------------------------------------
 void runStats()
 {
   if (State == STARTING)
   {
-    tft.setCursor(10, 20);
-    tft.print("Feature not enabled");
+    //tft.setCursor(10, 20);
+    //tft.print("Feature not enabled");
     setMenuState();
     changeTitle(S_STATUS);
 
-    //changeString(S_STATUS, statusInfo.title, sizeof(statusInfo.title));
-    //changeString(S_BUTTONS2, statusInfo.buttonLabels,sizeof(statusInfo.buttonLabels));
     statusInfo.Update = true;
-    tft.drawBitmap(64, 30, g_stats, 32, 76, fgColour);
-  }
-  else if (State == MENUSTATE)
-  {
-
-    if (b1.isPressed() == 1)
-    {
-      State = SHUTDOWN;
-    }
+    tft.setCursor(10, 40);
+    tft.print("Quests");
+    tft.setCursor(120, 40);
+    tft.print("Level");
+    tft.setCursor(120, 60);
+    tft.print("XP");
+    tft.drawBitmap(48, 32, g_stats, 64, 72, fgColour);
   }
 }
 
 
+// ---------------------------------------------------
+// ---------------------------------------------------
+// ---------------------------------------------------
 
-//=========================================
-void setMenuState()
-{
-  State = MENUSTATE;
-  knob.setRange(5);
-  lastSelected = knob.getPos();
-}
-//=========================================
 void runSettings()
 {
-  // if starting
-  //  black out the main area (we'll be altering it)
-  //  draw the different options
-  //  set the knob to the number of choices
-  // if update
-  //  this is main update, redraw selection box
-  // if running
-  //  check for knob move, redraw
-  //  check for button presses
-  // if brightness
-  //  set knob to 100
-  //  check for knob move, 
-  //  if move
-  //    erase old bar
-  //    draw new bar
-  //    set brightness (write to pin)
-  //    if button press
-  //      return to settings or menu (based on button)
-  // if fgcolour
-  //  run submode runFGColourSelect
-  // if bgcolour
-  //  run submode runBGColourSelect 
-  // if adminPassword
-  //  print to screen admin password
-  
   if (State == STARTING)
   {
     setMenuState();
@@ -737,7 +852,7 @@ void runSettings()
     tft.drawLine(75,12, 75, 113, fgColour);
     
     // display selection options
-    for (byte i=0; i < 4; i++)
+    for (byte i=0; i < 3; i++)
     {
       tft.setCursor(settingIcons[i].x+settingIcons[i].offsetX, settingIcons[i].y+settingIcons[i].offsetY);
       tft.print(localisation[settingIcons[i].title]);
@@ -749,7 +864,7 @@ void runSettings()
     if (b1.isPressed() == 1)
     {
       // we've entered the selection window.  change the state to stop menu choosing and set the knob.
-      knob.setRange(4);
+      knob.setRange(3);
       lastSelected = knob.getPos();
       drawSelectionBox(settingIcons[lastSelected]);
       State = INMODE;
@@ -779,35 +894,14 @@ void runSettings()
       State = STARTING;
     }
   }
-  
+
+
 }
 
 
-void runAdminPW()
-{
-  tft.setCursor(80, 100);
-  tft.print(ADMIN_PW);
-  setMenuState();
-  Mode = SETTINGS;
-}
-
-void runSetBuzzer()
-{
-  tft.setCursor(80, 100);
-  if (statusInfo.buzzer)
-  {
-    statusInfo.buzzer = false;
-    tft.print(localisation[S_SOUNDDISABLED]);
-  }
-  else
-  {
-    statusInfo.buzzer = true;
-    tft.print(localisation[S_SOUNDENABLED]);
-  }
-  setMenuState();
-  Mode = SETTINGS;
-}
-
+// ---------------------------------------------------
+// ---------------------------------------------------
+// ---------------------------------------------------
 void runFGColour()
 {
   // clear the draw box area
@@ -915,126 +1009,47 @@ void runBGColour()
   }
 }
 
+void runAdminPW()
+{
+  tft.setCursor(80, 100);
+  tft.print(ADMIN_PW);
+  setMenuState();
+  Mode = SETTINGS;
+}
+// ---------------------------------------------------
+// ---------------------------------------------------
+// ---------------------------------------------------
 
-//=========================================
-//=========================================
-void runMessenger()
+
+
+
+// ---------------------------------------------------
+// ---------------------------------------------------
+// ---------------------------------------------------
+void runRadio()
 {
   if (State == STARTING)
   {
-    tft.setCursor(10, 20);
-    tft.print("Feature not enabled");
+    //tft.setCursor(10, 20);
+    //tft.print("Feature not enabled");
     setMenuState();
-    changeTitle(S_MESSENGER);
+    changeTitle(S_RADIO);
+
     statusInfo.Update = true;
+    tft.setCursor(10, 40);
+    tft.print("Radio Coming Soon");
+    tft.setCursor(10, 50);
+    tft.print("(After everything else)");
+    
   }
 }
 
 
 
 
-
-
-
-
-
-// =======================================
-// Supporting Functions
-
-
-void drawMenu()
-{
-  for (int i = 0; i < 4; i++)
-  {
-    tft.drawBitmap(menuIcons[i].x + menuIcons[i].offsetX, menuIcons[i].y + menuIcons[i].offsetY, menuIcons[i].img, menuIcons[i].w, menuIcons[i].h, fgColour);
-  }
-}
-
-
-
-
-void drawSelectionBox(Icon icon)
-{
-  tft.drawRoundRect(icon.x, icon.y, icon.sbw, icon.sbh, 1, fgColour);
-
-}
-
-void clearSelectionBox(Icon icon)
-{
-  /*
-  byte x = icons[selected].x;
-  byte y = icons[selected].y;
-  byte w = icons[selected].sbw;
-  byte h = icons[selected].sbh;
-  */
-  tft.drawRoundRect(icon.x, icon.y, icon.sbw, icon.sbh, 1, bgColour);
-}
-
-
-
-
-
-
-
-
-
-// changeMode()
-// This function changes the mode.  It also does any housekeeping
-// mode changing entails without having to worry about what that
-// is in the other functions.  Not that there is much ATM, but
-// enough to make this worthwhile. Plus more in the future
-
-void changeMode(byte newMode)
-{
-  
-  if (Mode == TRACKER) // this is a bad place to have this. we need to objectize the modes! TODO!
-  {
-    targetting = false;
-    WiFi.disconnect();
-  }
-  // setting the default for the menustate just in case we need it
-  knob.setRange(5);
-  lastSelected = modePos;
-  
-  
-  tft.fillScreen(bgColour);
-  Mode = newMode;
-  State = STARTING;
-}
-
-
-// backgroundUpdate()
-// All the stuff that has to run in the background.
-void backgroundUpdate()
-{
-  dnsServer.processNextRequest();
-  webServer.handleClient();
-  delay(100); // a delay of 1ms will allow the wifi AP half to execute itself.
-
-  checkRFID();
-
-  // TODO: if buzzer is active, count down the delay on it.
-  // if the delay reaches 0 then shut the buzzer down.
-  // (TBH it may be more of a "clicker" than a "buzzer". we
-  //  can't really manage the microseconds to make it buzz.
-  //  This may be a motor instead)
-
-  if (statusInfo.buzzer)
-  {
-    if (statusInfo.buzzerDelay > 0)
-    {
-      statusInfo.buzzerDelay -= 1;
-      digitalWrite(15, HIGH);
-    }
-    else
-    {
-      digitalWrite(15, LOW);
-    }
-  }
-  
-}
-
-
+// ---------------------------------------------------
+// ---------------------------------------------------
+// ---------------------------------------------------
 
 
 
@@ -1072,67 +1087,188 @@ void serveHomepage()
 
 void handleMsg()
 {
-  
-  if (webServer.hasArg("Target"))
-  {
-    // attempt to connect to target network
-    // if we connect
-    //  (optional: clear out the screen maybe?)
-    //  GET or POST the message
-    //  disconnect
-    
-    // if we are already tracking something we need to break it. We'll pick it back up after
-    if (targetting)
-      WiFi.disconnect();
-    
-    tft.setCursor(145, 0);
-    tft.print("S!");
-    Serial.print("connecting to ");
-    Serial.println(webServer.arg("Target"));
-    char buf[31];
-    webServer.arg("Target").toCharArray(buf, 31);  // there's gotta be a better way to do this
-    WiFi.begin(buf, WIFI_PW);
+}  
 
-    bool connecting = true;
-    while (connecting)
+
+
+// ---------------------------------------------------
+// ---------------------------------------------------
+// ---------------------------------------------------
+
+
+void backgroundUpdate()
+{
+  dnsServer.processNextRequest();
+  webServer.handleClient();
+  delay(10); // a delay of 1ms will allow the wifi AP half to execute itself.
+  checkRFID();
+}
+
+
+void checkRFID()
+{
+  byte key[4];
+  bool scanned = false;
+  if (rfid.PICC_IsNewCardPresent())
+  {
+    if (rfid.PICC_ReadCardSerial())
     {
-      delay(250);
-      if (WiFi.status() == WL_CONNECTED)
+      scanned = true;
+      for (int i=0; i < 4; i++)
       {
-        Serial.println("connected, sending");
-        // We've connected.  Send message
-        if (client.connect("wipboy.com", 80))
-        {
-          client.println("GET /serviceMsg?msg=hello HTTP/1.1");
-          client.println("Host: wipboy.com");
-          client.println("Connection: close");
-          client.println();
-          delay(1000);
-          client.stop();
-          Serial.println("Sent! Wow");
-        }
-        
-        // and disconnect
-        WiFi.disconnect();
-        
+        key[i] = rfid.uid.uidByte[i];
+        Serial.print(key[i]);
+        Serial.print(' ');
       }
-      
-      else if (WiFi.status() == WL_CONNECT_FAILED || WiFi.status() == WL_CONNECTION_LOST)
-      {
-        tft.setCursor(145,0);
-        tft.print("s*");
-        connecting = false;
-        delay(1000);
-      }
+      Serial.println("");
+      rfid.PICC_HaltA();
     }
-    if (targetting) // restore target lock
+  }
+  if (!scanned)
+  {
+    //Serial.println("returning");    
+    return;
+  }
+    
+  // now check against active quests
+  Quest *tempQuest;
+  Serial.println("=====================================");
+  Serial.println("checking if key matches any quests");
+  for (int i=0; i<QUESTCOUNT; i++)
+  {
+    tempQuest = &Quests[i];
+    Serial.print("Active?:");
+    Serial.println(tempQuest->active);
+    if (tempQuest->active)
     {
-      char buf[31];
-      target.ssid.toCharArray(buf, 31);  // there's gotta be a better way to do this
-      WiFi.begin(buf, WIFI_PW);
-    } 
+      Serial.println("------");
+      Serial.println("Active quest:");
+      Serial.println(QuestTitles[tempQuest->title]);
+      Serial.println(tempQuest->getStageKeyIndex());
+      /*
+      Serial.print(StageKeys[tempQuest.getStageKeyIndex()][0]);
+      Serial.print(" ");
+      Serial.print(StageKeys[tempQuest.getStageKeyIndex()][1]);
+      Serial.print(" ");
+      Serial.print(StageKeys[tempQuest.getStageKeyIndex()][2]);
+      Serial.print(" ");
+      Serial.print(StageKeys[tempQuest.getStageKeyIndex()][3]);
+      Serial.println(" ");
+      Serial.println("-----------");
+      Serial.println(key[0]);
+      Serial.println(StageKeys[tempQuest.getStageKeyIndex()][0]);
+      */
+      if (checkKey(key, StageKeys[tempQuest->getStageKeyIndex()]))
+      {
+        Serial.println("found a match!");
+        // it's a match.  advance the quest, do the popup window?
+        tempQuest->nextStage();
+        Serial.println(tempQuest->active);
+        printPopupMsg(&QuestDescriptions[tempQuest->getDescIndex()]);
+        delay(2000);
+        setMenuState();
+        break;
+      }
+      else
+        Serial.println("does not match this quest");
+    }
   }
 }
+
+bool checkKey(byte a[], byte b[])
+{
+  bool match;
+  if (a[0] != NULL)
+  {
+    match = true;
+  }
+  for (byte k=0; k<4; k++)
+  {
+    if (a[k] != b[k])
+    {
+      match = false;
+      break;
+    }
+  }
+  return match;
+}
+
+
+void setMenuState()
+{
+  State = MENUSTATE;
+  knob.setRange(5);
+  lastSelected = knob.getPos();
+}
+
+
+
+
+
+
+
+
+void changeTitle(byte string)
+{
+  localisation[string].toCharArray(statusInfo.title, TITLE_BUFFER_SIZE);
+  for (int i = localisation[string].length(); i < TITLE_BUFFER_SIZE - 1; i++)
+  {
+    statusInfo.title[i] = ' ';
+  }
+  statusInfo.Update = true;
+}
+
+
+
+
+
+
+void changeMode(byte newMode)
+{
+  
+  if (Mode == TRACKER) // this is a bad place to have this. we need to objectize the modes! TODO!
+  {
+    targetting = false;
+    WiFi.disconnect();
+  }
+  // setting the default for the menustate just in case we need it
+  knob.setRange(5);
+  lastSelected = modePos;
+  
+  
+  tft.fillScreen(bgColour);
+  Mode = newMode;
+  State = STARTING;
+}
+
+
+
+
+
+void drawSelectionBox(Icon icon)
+{
+  tft.drawRoundRect(icon.x, icon.y, icon.sbw, icon.sbh, 1, fgColour);
+
+}
+
+void clearSelectionBox(Icon icon)
+{
+  /*
+  byte x = icons[selected].x;
+  byte y = icons[selected].y;
+  byte w = icons[selected].sbw;
+  byte h = icons[selected].sbh;
+  */
+  tft.drawRoundRect(icon.x, icon.y, icon.sbw, icon.sbh, 1, bgColour);
+}
+
+
+
+
+
+
+
+
 
 // statusBarUpdate()
 // This function checks if the status bar needs to be re-rendered.
@@ -1145,6 +1281,7 @@ void statusBarUpdate()
   // if we know we need to update
   if (statusInfo.Update)
   {
+    Serial.println("updating status bar");
     // if the status information has changed, re-display top bar
     if (statusInfo.displayTop)
     {
@@ -1202,51 +1339,62 @@ void statusBarUpdate()
   }
 }
 
-// changeString()
-// this is my unhappy implementation of a string combining
-// method.  You say what string inside the localisation array
-// you want, where you want to copy it to, and how long
-// it is, and it'll go to town.
 
-// The reason this isn't more simple is because we have to
-// update the buffer space on the screen with blank spaces
-// to wipe out previous text.  It's the only way to render
-// things without flickering on the ST7735.
 
-void changeString(byte string, char *Buffer, byte len)
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+Quest Quests[] = 
 {
-  localisation[string].toCharArray(Buffer, len);
-  for (int i = localisation[string].length(); i < len - 1; i++)
-  {
-    Buffer[i] = ' ';
-  }
-}
+  Quest(),Quest(),Quest()
+};
+*/
 
 
 
-// changeTitle() and changeButtonLabels()
-// These are better shortcuts to update specific buffers. It's
-// a bit of hardcoding unpleasantness to solve specific
-// instances, but it's done so often it makes it worthwhile.
 
-void changeTitle(byte string)
+void buildQuests()
 {
-  localisation[string].toCharArray(statusInfo.title, TITLE_BUFFER_SIZE);
-  for (int i = localisation[string].length(); i < TITLE_BUFFER_SIZE - 1; i++)
-  {
-    statusInfo.title[i] = ' ';
-  }
-  statusInfo.Update = true;
+  /*
+   * build out all the quests manually.  We'll need to write a program to let 
+   * others help us program them later.  Maybe a google spreadsheet
+   */
+  Quests[0].stageKeys[0]=0;
+  Quests[0].descriptions[0] = 1;
+  Quests[0].descriptions[1] = 2;
+  Quests[0].title = 0;
+
+  Quests[1].stageKeys[0] = 1;
+  Quests[1].descriptions[0] = 0;
+  Quests[1].descriptions[1] = 3;
+  Quests[1].visible = true;
+  Quests[1].title = 2;
+
+  Quests[2].stageKeys[0] = 2;
+  Quests[2].stageKeys[1] = 3;
+  Quests[2].stageKeys[2] = 4;
+  Quests[2].descriptions[0] = 0;
+  Quests[2].descriptions[1] = 4;
+  Quests[2].descriptions[2] = 5;
+  Quests[2].descriptions[3] = 2;
+  Quests[2].maxStage = 3;
+  Quests[2].visible = false;
+  Quests[2].title = 3;
+
+  
+
+
 }
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1267,8 +1415,8 @@ void buildIcons()
   menuIcons[0].img = i_lightbulb;
   menuIcons[1].x = 10;
   menuIcons[1].y = 68;
-  menuIcons[1].Mode = MESSENGER;
-  menuIcons[1].title = S_MESSENGER;
+  menuIcons[1].Mode = QUESTS;
+  menuIcons[1].title = S_QUESTS;
   menuIcons[1].img = i_messages;
   menuIcons[2].x = 60;
   menuIcons[2].y = 68;
@@ -1314,8 +1462,9 @@ void buildIcons()
   settingIcons[2].offsetY=1;
   settingIcons[2].sbw = 62;
   settingIcons[2].sbh = 10;
-  settingIcons[2].title = S_SETTINGS2;
-  settingIcons[2].Mode = ADJUSTBRIGHTNESS;
+  settingIcons[2].title = S_SETTINGS3;
+  settingIcons[2].Mode = SHOWADMINPW;
+  /*
   settingIcons[3].x = 0;
   settingIcons[3].y = 45;
   settingIcons[3].w = 62;
@@ -1336,7 +1485,7 @@ void buildIcons()
   settingIcons[4].sbh = 10;
   settingIcons[4].title = S_SETTINGS4;
   settingIcons[4].Mode = SETBUZZER;
-
+*/
 
   byte c = 0;
   for (byte y=0; y < 3; y++)
@@ -1365,3 +1514,5 @@ void buildIcons()
   selectionIcon.sbh = 10;
   selectionIcon.sbw = 160;
 }
+
+

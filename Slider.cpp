@@ -17,6 +17,9 @@ int Slider::hasChanged() {
   {
     _lastReading = reading;
     reading = map(reading, 9, 924, 0, _range-1);
+    //Serial.println("----");
+    //Serial.println(_lastReading);
+    //Serial.println(reading);
     if (_sliderPos != reading)
     {
       _sliderPos = reading;

@@ -1,0 +1,14 @@
+Quest 1: visible introduction quest.
+stage 0: Welcome! This introductory quest is completed by swiping the right : card 0
+stage 1: end stage
+
+Quest 2: invisible discovery
+stage 0: "" : card 1
+stage 1: Swipe card 2 discovered!
+
+Quest 3: multistage quest
+stage 0: "" : card 2
+stage 1: Quest unlocked.  Swipe card 4 to continue : card 3
+stage 2: Swipe card 4 to continue : 3
+stage 2: Quest completed
+
