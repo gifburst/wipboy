@@ -1,3 +1,22 @@
+/*
+    Wip-Boy 2000. ESP8266-based wristband game system.
+    Copyright (C) 2016 Richard Woodward-Roth
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+
 #include <ESP8266WiFi.h>
 #include "./DNSServer.h"                  // Patched lib
 #include <ESP8266WebServer.h>
@@ -19,6 +38,37 @@
 // =======================================
 // Declare
 
+
+/*
+ * Pinout for the ESP-12:
+ * GPIO 0 - btn to gnd
+ * GPIO 1 - 
+ * GPIO 2 - buzzer
+ * GPIO 3 - 
+ * GPIO 4 - RFID SS
+ * GPIO 5 - RFID RST
+ * GPIO12 - SPI MISO (RFID)
+ * GPIO13 - SPI MOSI (RFID, TFT)
+ * GPIO14 - SPI CLK (RFID, TFT)
+ * GPIO15 - 10k resistor to gnd (open, still useful)
+ * GPIO16 - DC on LCD 
+ * ADC - control knob
+ * 
+ * 
+ * Given I want to connect the TFT CS back up, it'll
+ * probably go onto GPIO15.  Pinouts say to use it too so
+ * I doubt it'll be much trouble.  Will test soon.
+ * 
+ * This leaves specifically 2 GPIO left: 1 and 3.  It's
+ * not much, but enough to run I2C.  If the I2C is hard-
+ * wired for 4/5 then we just swap the RFID and the I2C.
+ * We can't start the I2C (radio/mp3 player) until we get
+ * OTA updating working, which is on the back burner ATM.
+ * 
+ * *If* I want the LEDs on the front it'll have to be
+ * through the I2C as well.  Hopes aren't high for those,
+ * I'll probably fill those in on future models.
+ */
 
 // ---------------------------------------------------
 // ---------------------------------------------------
@@ -725,52 +775,110 @@ int printQuests()
   return counter;
 }
 
+
+
 int qBase = 0;
 int qCursor = 0;
+int qCount = 0;
 
-int printQuestsNew(bool useBase)
+
+bool compileQuestList()
 {
-  int counter = 0;
+  qCount = 0;
   for (int i=0; i<QUESTCOUNT; i++)
   {
     if (Quests[i].active && Quests[i].visible)
     {
       // we can see it. add to the counter
-      Quests[i].id = counter;
-      counter++;
+      Quests[i].id = qCount;
+      qCount++;
     }
   }
-  knob.setRange(counter);
-  
+  if (qCount == 0) // we want to tell it not to do anything if there are no active visible quests.
+    return false;  // that way we're not locked into the submenu without any way of getting out.
+
+  /*
+   * Now we need to set the cursor and hte base to where the knob is
+   */
+  if (qCount < 10)
+  {
+    qBase = 0;
+    qCursor = qCount;
+  }
+  else
+  {
+    qCursor = 9;
+    qBase = qCount - 10;
+  }
+  return true;
 }
 
 
 
+void printQuestList()
+{
+  byte counter = 0;
+  for (int i = qBase; i < qBase + 10; i++)
+  {
+    if (i > qCount) // we don't want to go higher than we actually have.
+      break;
+      
+    tft.setCursor(5, 15+(counter*8));
+    for (int x=0; x < QUESTCOUNT; x++)
+    {
+      if (Quests[x].id == i)
+      {
+        tft.print(QuestTitles[Quests[x].title]);
+        break;
+      }
+    }
+    counter++;
+  }
+  // now we have to draw the selectionBox
+}
+
+
+
+bool updateQuestList()
+{
+  /*
+   * so the knob has changed. we need to check whether we just move the selectionbox or redraw the list.
+   */
+  if (knob.getPos() > qBase)
+  {
+    qCursor = knob.getPos() - qBase;
+    if (qCursor >= 10)
+    {
+      // it's gone off the bottom of the screen
+      qCursor = 9;
+      qBase = knob.getPos() - 10;
+    }
+    // otherwise we're happy to just leave it as is
+  }
+  else if (knob.getPos() < qBase)
+  {
+    // this is easy. set the base as the knob and spin from there.
+    qCursor = 0;
+    qBase = knob.getPos();
+  }
+  else
+    return false; // it moved but not enough to justify redrawing the list
+    
+  return true;  // since it did move enough to do something, redraw
+}
+
 
 void runQuests()
 {
-    /*
-     * if starting
-     *  Run through the list of active quests
-     *  display those which are visible
-     * 
-     * if button pressed
-     *  reprint list
-     *  put selection box on quests
-     *  if pressed
-     *    print message
-     *    
-     * 
-     * 
-     * 
-     */
+
     if (State == STARTING)
     {
       setMenuState();
       changeTitle(S_QUESTS);
       statusInfo.Update = true;
-  
-      printQuests();    
+
+      compileQuestList();
+      printQuestList();
     }
 
     else if (State == MENUSTATE)
@@ -785,7 +893,8 @@ void runQuests()
          *    print message
          *    
           */
-        knob.setRange(printQuests());
+        printQuestList();
+        knob.setRange(qCount);
         State = INMODE;
       }
     }
@@ -802,6 +911,12 @@ void runQuests()
 
     else if (State == INMODE)
     {
+      if (knob.hasChanged())
+      {
+        // redraw the selection box.
+        if (updateQuestList())
+          printQuestList();
+      }
     if (b1.isPressed() == 1)
       {
         changeMode(QUESTNODECHOOSER);
