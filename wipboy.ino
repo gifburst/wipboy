@@ -365,6 +365,8 @@ void runNodeChooser()
   {
     State = UPDATE;
     changeTitle(S_CHOOSENODE);
+
+    selectionIcon.w = 60;
    
     // populate the list
     // and set the knob to list length while we're at it
@@ -821,6 +823,9 @@ void printQuestList()
   for (int i = qBase; i < qBase + 10; i++)
   {
     if (i > qCount) // we don't want to go higher than we actually have.
+      // TODO: We still need to clear out the rest of the list, so fix this to 
+      // not break but keep going and only print blank lines.  Actually, it may not be
+      // needed, but we'll see.
       break;
       
     tft.setCursor(5, 15+(counter*8));
@@ -871,57 +876,67 @@ bool updateQuestList()
 void runQuests()
 {
 
-    if (State == STARTING)
-    {
-      setMenuState();
-      changeTitle(S_QUESTS);
-      statusInfo.Update = true;
+  if (State == STARTING)
+  {
+    setMenuState();
+    changeTitle(S_QUESTS);
+    statusInfo.Update = true;
 
-      compileQuestList();
-      printQuestList();
-    }
+    compileQuestList();
+    printQuestList();
 
-    else if (State == MENUSTATE)
-    {
-      if (b1.isPressed() == 1)
-      {
-        /*
-         * if button pressed
-         *  reprint list
-         *  put selection box on quests
-         *  if pressed
-         *    print message
-         *    
-          */
-        printQuestList();
-        knob.setRange(qCount);
-        State = INMODE;
-      }
-    }
+    selectionIcon.w = 120;
+  }
 
-    else if (State == POPUPSTATE)
-    {
-      // there's a message popped up. if the button is pressed clear and redraw the screen
-      
-      if (b1.isPressed() == 1)
-      {
-        changeMode(QUESTS);
-      }
-    }
-
-    else if (State == INMODE)
-    {
-      if (knob.hasChanged())
-      {
-        // redraw the selection box.
-        if (updateQuestList())
-          printQuestList();
-      }
+  else if (State == MENUSTATE)
+  {
     if (b1.isPressed() == 1)
-      {
-        changeMode(QUESTNODECHOOSER);
-      }      
-    }    
+    {
+      /*
+       * if button pressed
+       *  reprint list
+       *  put selection box on quests
+       *  if pressed
+       *    print message
+       *    
+        */
+      printQuestList();
+      knob.setRange(qCount);
+      State = INMODE;
+      selectionIcon.y = 15 + (qCursor * 8);
+      drawSelectionBox(selectionIcon);
+    }
+  }
+
+  else if (State == INMODE)
+  {
+    if (knob.hasChanged())
+    {
+      // clear the selection box.
+      clearSelectionBox(selectionIcon);
+      // check if we have to reprint the list.
+      if (updateQuestList())
+        printQuestList();
+      selectionIcon.y = 15 + (qCursor * 8);
+      drawSelectionBox(selectionIcon);
+    }
+  if (b1.isPressed() == 1)
+    {
+      changeMode(QUESTNODECHOOSER);
+    }      
+  }    
+
+
+
+  else if (State == POPUPSTATE)
+  {
+    // there's a message popped up. if the button is pressed clear and redraw the screen
+    
+    if (b1.isPressed() == 1)
+    {
+      changeMode(QUESTS);
+    }
+  }
 }
 
 
