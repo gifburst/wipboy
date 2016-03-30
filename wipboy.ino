@@ -83,7 +83,12 @@ uint16_t bgColour = ST7735_BLACK;
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
 
-Quest Quests[] = {Quest(), Quest(), Quest()};
+Quest Quests[] = 
+{
+  Quest(), Quest(), Quest(),
+  Quest(), Quest(), Quest(),
+  Quest(), Quest(), Quest()
+};
 // ---------------------------------------------------
 // ---------------------------------------------------
 //
@@ -272,10 +277,11 @@ void setup()
   tft.println("GUI constructed");
 
   buildQuests();
+  compileQuestList();
+  checkLevel();
   tft.println("Quests added");
 
-  Serial.println("Setup complete");
-
+  
   pinMode(15, OUTPUT);
   digitalWrite(15, HIGH);
   delay(1);
@@ -285,6 +291,9 @@ void setup()
   setMenuState();
   modePos = knob.getPos();
   changeMode(ModesRef[knob.getPos()]);
+
+  Serial.println("Setup complete");
+
 }
 
 void loop() 
@@ -313,6 +322,8 @@ void loop()
     runSettings();
   else if (Mode==RADIO)
     runRadio();
+  else if (Mode==MAPS)
+    runMaps();
   else if (Mode==ADJUSTFGCOLOUR)
     runFGColour();
   else if (Mode==ADJUSTBGCOLOUR)
@@ -321,8 +332,8 @@ void loop()
     runAdminPW();
   else if (Mode==NODECHOOSER)
     runNodeChooser();
-  else if (Mode==QUESTNODECHOOSER)
-    runQuestNodeChooser();
+  else if (Mode==RUNPOPUP)
+    runPopup();
 
 
 }
@@ -366,7 +377,7 @@ void runNodeChooser()
     State = UPDATE;
     changeTitle(S_CHOOSENODE);
 
-    selectionIcon.w = 60;
+    selectionIcon.sbw = 60;
    
     // populate the list
     // and set the knob to list length while we're at it
@@ -625,103 +636,6 @@ void runTracker()
 // ---------------------------------------------------
 // ---------------------------------------------------
 // ---------------------------------------------------
-void runQuestNodeChooser()
-{
-  // we can recycle the targetOffset/Cursor variables for this mode
-  if (State == STARTING)
-  {
-    State = UPDATE;
-    changeTitle(S_CHOOSENODE);
-   
-    // populate the list
-    // and set the knob to list length while we're at it
-    knob.setRange(sizeof(Quests));
-
-    // cursor = 0 - 9 (only space for 10 slots)
-    // offset = true list selection
-    // if knob.getPos() < 9:
-    //    offset = 0
-    //    cursor = knob.getPos()
-    //  else
-    //    cursor = 9
-    //    offset = knob.getPos() - 9
-    if (knob.getPos() < 9)
-    {
-      targetOffset = 0;
-      targetCursor = knob.getPos();
-    }
-    else
-    {
-      targetCursor = 9;
-      targetOffset = knob.getPos() - 9;
-    }
-  }
-
-
-
-  else if (State == UPDATE)
-  {
-    // redraw the list, from the offset to offset+9
-    // draw the selection box (offset Y + (cursor*10))
-    byte range;
-    if (knob.getRange() < 10)
-    {
-      range = knob.getRange();
-    }
-    else
-    {
-      range = 10;
-    }
-    
-    for (byte i = 0; i < range; i++)
-    {
-      tft.setCursor(1, 11+(i*10));
-      tft.print(QuestTitles[Quests[i].title]);
-    }    
-    State = RUNNING; 
-  }
-
-  
-
-  else if (State == RUNNING)
-  {
-    if (knob.hasChanged())
-    {      
-      clearSelectionBox(selectionIcon);
-
-      int change = knob.getPos() - targetOffset;
-      if (change < 0)
-      {
-        targetCursor = 0;
-        targetOffset = knob.getPos();
-        State = UPDATE;
-      }
-      else if (change > 9)
-      {
-        targetCursor = 9;
-        targetOffset = knob.getPos() - 9;
-        State = UPDATE;
-      }
-      else
-      {
-        targetCursor = change;
-        selectionIcon.y = 10 + (targetCursor * 10);
-        drawSelectionBox(selectionIcon);        
-      }
-    }
-    if (b1.isPressed() == 1)
-    {
-      // display the text for the quest
-      printPopupMsg(&QuestDescriptions[Quests[knob.getPos()].descriptions[Quests[knob.getPos()].stage]]);
-      // we're not using changeMode because we don't want to reset the State
-      // back to STARTING
-      //Mode = QUESTS;
-      //State = POPUPSTATE;
-      delay(2000);
-      setMenuState();
-    }    
-  }
-}
 
 
 
@@ -741,42 +655,28 @@ void printPopupMsg(String* msg)
   for (byte i=0; i < msg->length(); i++)
   {
     counter++;
-    if ((counter >= 18) || (msg->charAt(i) == '~'))
+    if ((counter >= 20) || (msg->charAt(i) == '~'))
     {
       counter = 0;
       y++;
       tft.setCursor(startX+5, startY+5+(y*8));
     }
-    tft.print(msg->charAt(i));
+    if (msg->charAt(i) != '~')
+      tft.print(msg->charAt(i));
   }
+  Mode = RUNPOPUP;
+  State = STARTING;
 }
 
-
-int printQuests()
+void runPopup()
 {
-  int y = 15;
-  int counter = 0;
-
-  for (int i=0; i<QUESTCOUNT; i++)
+  if (b1.isPressed() == 1)
   {
-    if (Quests[i].active && Quests[i].visible)
-    {
-      Quests[i].id = counter;
-      counter++;
-      // this bit is wrong. we need to do it like the wifi list.  We really need a GUI system. 
-      tft.setCursor(10, y);
-      tft.print(QuestTitles[Quests[i].title]);
-      y+=10;
-      if (counter >= 10)
-        break;
-    }
-    //else
-    //{
-    //}
+    setMenuState();
+    changeMode(ModesRef[knob.getPos()]); 
+    
   }
-  return counter;
 }
-
 
 
 int qBase = 0;
@@ -787,30 +687,46 @@ int qCount = 0;
 bool compileQuestList()
 {
   qCount = 0;
+  Serial.println("-----------");
+  Serial.println("Compiling quests");
   for (int i=0; i<QUESTCOUNT; i++)
   {
+    Serial.print("Quest: ");
+    Serial.println(QuestTitles[Quests[i].title]);
     if (Quests[i].active && Quests[i].visible)
     {
       // we can see it. add to the counter
       Quests[i].id = qCount;
       qCount++;
+      Serial.println("active&visible");
+    }
+    else
+    {
+      Quests[i].id = 255;
+      Serial.println(Quests[i].active);
+      Serial.println(Quests[i].visible);
     }
   }
+  Serial.print("qCount: ");
+  Serial.println(qCount);
   if (qCount == 0) // we want to tell it not to do anything if there are no active visible quests.
     return false;  // that way we're not locked into the submenu without any way of getting out.
 
   /*
    * Now we need to set the cursor and hte base to where the knob is
    */
-  if (qCount < 10)
+  //*if (qCount < 10)
+  if (qCount < 5)
   {
     qBase = 0;
-    qCursor = qCount;
+    qCursor = qCount-1;
   }
   else
   {
-    qCursor = 9;
-    qBase = qCount - 10;
+    //*qCursor = 9;
+    //*qBase = qCount - 10;
+    qCursor = 4;
+    qBase = qCount - 5;
   }
   return true;
 }
@@ -820,24 +736,42 @@ bool compileQuestList()
 void printQuestList()
 {
   byte counter = 0;
-  for (int i = qBase; i < qBase + 10; i++)
+  /*
+  Serial.println("-----------");
+  Serial.println("Printing quests");
+  Serial.print("qBase: ");
+  Serial.println(qBase);
+  Serial.print("qCount: ");
+  Serial.println(qCount);
+  */
+  //*for (int i = qBase; i < qBase + 10; i++)
+  for (int i = qBase; i < qBase + 5; i++)
   {
-    if (i > qCount) // we don't want to go higher than we actually have.
-      // TODO: We still need to clear out the rest of the list, so fix this to 
-      // not break but keep going and only print blank lines.  Actually, it may not be
-      // needed, but we'll see.
+    //Serial.print("i: ");
+    //Serial.println(i);
+    if (i >= qCount)
+    {
+      //Serial.println("Breaking");
       break;
-      
-    tft.setCursor(5, 15+(counter*8));
+    }
+
     for (int x=0; x < QUESTCOUNT; x++)
     {
+      /*Serial.println("---");
+      Serial.print(QuestTitles[Quests[x].title]);
+      Serial.print(": ");
+      Serial.println(Quests[x].id);
+      */
       if (Quests[x].id == i)
       {
+        //Serial.println("printing title");
+        tft.setCursor(1, 15+(counter*10));
+        tft.print('-');
         tft.print(QuestTitles[Quests[x].title]);
+        counter++;        
         break;
       }
     }
-    counter++;
   }
   // now we have to draw the selectionBox
 }
@@ -849,14 +783,19 @@ bool updateQuestList()
   /*
    * so the knob has changed. we need to check whether we just move the selectionbox or redraw the list.
    */
+  Serial.println(knob.getPos());
+  Serial.println(qBase);
   if (knob.getPos() > qBase)
   {
     qCursor = knob.getPos() - qBase;
+    //*if (qCursor >= 10)
     if (qCursor >= 10)
     {
       // it's gone off the bottom of the screen
-      qCursor = 9;
-      qBase = knob.getPos() - 10;
+      //*qCursor = 9;
+      //*qBase = knob.getPos() - 10;
+      qCursor = 4;
+      qBase = knob.getPos() - 5;
     }
     // otherwise we're happy to just leave it as is
   }
@@ -867,8 +806,10 @@ bool updateQuestList()
     qBase = knob.getPos();
   }
   else
+  {
+    qCursor = knob.getPos();
     return false; // it moved but not enough to justify redrawing the list
-    
+  } 
   return true;  // since it did move enough to do something, redraw
 }
 
@@ -885,7 +826,7 @@ void runQuests()
     compileQuestList();
     printQuestList();
 
-    selectionIcon.w = 120;
+    selectionIcon.sbw = 84;
   }
 
   else if (State == MENUSTATE)
@@ -902,8 +843,9 @@ void runQuests()
         */
       printQuestList();
       knob.setRange(qCount);
+      qCursor = knob.getPos();
       State = INMODE;
-      selectionIcon.y = 15 + (qCursor * 8);
+      selectionIcon.y = 14 + (qCursor * 10);
       drawSelectionBox(selectionIcon);
     }
   }
@@ -917,26 +859,16 @@ void runQuests()
       // check if we have to reprint the list.
       if (updateQuestList())
         printQuestList();
-      selectionIcon.y = 15 + (qCursor * 8);
+      selectionIcon.y = 14 + (qCursor * 10);
       drawSelectionBox(selectionIcon);
     }
   if (b1.isPressed() == 1)
     {
-      changeMode(QUESTNODECHOOSER);
+      Serial.println("--questSelected--");
+      Serial.println(knob.getPos());
+      printPopupMsg(&QuestDescriptions[Quests[knob.getPos()].descriptions[Quests[knob.getPos()].stage]]);
     }      
   }    
-
-
-
-  else if (State == POPUPSTATE)
-  {
-    // there's a message popped up. if the button is pressed clear and redraw the screen
-    
-    if (b1.isPressed() == 1)
-    {
-      changeMode(QUESTS);
-    }
-  }
 }
 
 
@@ -947,19 +879,32 @@ void runStats()
 {
   if (State == STARTING)
   {
+
+    
     //tft.setCursor(10, 20);
     //tft.print("Feature not enabled");
     setMenuState();
     changeTitle(S_STATUS);
-
     statusInfo.Update = true;
+
+    compileQuestList();
+    
     tft.setCursor(10, 40);
     tft.print("Quests");
+    tft.setCursor(10, 50);
+    tft.print(qCount);
+    
     tft.setCursor(120, 40);
     tft.print("Level");
+    tft.setCursor(120,50);
+    tft.print(statusInfo.level);
+    
     tft.setCursor(120, 60);
     tft.print("XP");
-    tft.drawBitmap(48, 32, g_stats, 64, 72, fgColour);
+    tft.setCursor(120,70);
+    tft.print(statusInfo.xp);
+    
+    tft.drawBitmap(48, 32, g_mainmenu, 64, 72, fgColour);
   }
 }
 
@@ -1149,6 +1094,20 @@ void runAdminPW()
 // ---------------------------------------------------
 // ---------------------------------------------------
 // ---------------------------------------------------
+void runMaps()
+{
+  if (State == STARTING)
+  {
+    //tft.setCursor(10, 20);
+    //tft.print("Feature not enabled");
+    setMenuState();
+    changeTitle(S_MAPS);
+
+    statusInfo.Update = true;
+    tft.setCursor(10, 40);
+    tft.print("Maps Coming Soon");
+  }
+}
 
 
 
@@ -1262,20 +1221,21 @@ void checkRFID()
     
   // now check against active quests
   Quest *tempQuest;
-  Serial.println("=====================================");
-  Serial.println("checking if key matches any quests");
+  //Serial.println("=====================================");
+  //Serial.println("checking if key matches any quests");
   for (int i=0; i<QUESTCOUNT; i++)
   {
     tempQuest = &Quests[i];
-    Serial.print("Active?:");
-    Serial.println(tempQuest->active);
+    //Serial.print("Active?:");
+    //Serial.println(tempQuest->active);
     if (tempQuest->active)
     {
+      /*
       Serial.println("------");
       Serial.println("Active quest:");
       Serial.println(QuestTitles[tempQuest->title]);
       Serial.println(tempQuest->getStageKeyIndex());
-      /*
+      
       Serial.print(StageKeys[tempQuest.getStageKeyIndex()][0]);
       Serial.print(" ");
       Serial.print(StageKeys[tempQuest.getStageKeyIndex()][1]);
@@ -1290,19 +1250,36 @@ void checkRFID()
       */
       if (checkKey(key, StageKeys[tempQuest->getStageKeyIndex()]))
       {
-        Serial.println("found a match!");
-        // it's a match.  advance the quest, do the popup window?
-        tempQuest->nextStage();
-        Serial.println(tempQuest->active);
+        // it's a match.  advance the quest, do the popup window
+        if (tempQuest->nextStage())  // It'll return true if it completes
+        {
+          statusInfo.xp += QuestXPAmounts[tempQuest->maxStage];
+          checkLevel();
+        }
+          
         printPopupMsg(&QuestDescriptions[tempQuest->getDescIndex()]);
-        delay(2000);
-        setMenuState();
         break;
       }
-      else
-        Serial.println("does not match this quest");
+      //else
+      //  Serial.println("does not match this quest");
     }
   }
+}
+
+void checkLevel()
+{
+  // we cycle through 100 iterations. if it is still more than that we've maxed out
+  for (int i=1; i<101; i++)
+  {
+    if (i*1500 > statusInfo.xp)
+    {
+      // it's more. found the level.
+      statusInfo.level = i;
+      return;
+    }
+  }
+  // if we get here we've maxed out
+  statusInfo.level = 100;
 }
 
 bool checkKey(byte a[], byte b[])
@@ -1327,7 +1304,7 @@ bool checkKey(byte a[], byte b[])
 void setMenuState()
 {
   State = MENUSTATE;
-  knob.setRange(5);
+  knob.setRange(6);
   lastSelected = knob.getPos();
 }
 
@@ -1362,7 +1339,7 @@ void changeMode(byte newMode)
     WiFi.disconnect();
   }
   // setting the default for the menustate just in case we need it
-  knob.setRange(5);
+  knob.setRange(6);
   lastSelected = modePos;
   
   
@@ -1443,8 +1420,8 @@ void statusBarUpdate()
       tft.drawLine(0,118, 160, 118, fgColour);
       tft.setCursor(0, 120);
 
-      tft.print(" ");
-      for (int i=0; i < 5; i++)
+      //tft.print(" ");
+      for (int i=0; i < 6; i++)
       {
         if (i == modePos)
         {
@@ -1500,12 +1477,13 @@ void buildQuests()
    * others help us program them later.  Maybe a google spreadsheet
    */
   Quests[0].stageKeys[0]=0;
-  Quests[0].descriptions[0] = 1;
+  Quests[0].descriptions[0] = 7;
   Quests[0].descriptions[1] = 2;
-  Quests[0].title = 0;
-
+  Quests[0].title = 4;
+  Quests[0].visible = true;
+  
   Quests[1].stageKeys[0] = 1;
-  Quests[1].descriptions[0] = 0;
+  Quests[1].descriptions[0] = 1;
   Quests[1].descriptions[1] = 3;
   Quests[1].visible = true;
   Quests[1].title = 2;
@@ -1520,6 +1498,42 @@ void buildQuests()
   Quests[2].maxStage = 3;
   Quests[2].visible = false;
   Quests[2].title = 3;
+
+  Quests[3].stageKeys[0]=6;
+  Quests[3].descriptions[0] = 0;
+  Quests[3].descriptions[1] = 6;
+  Quests[3].title = 5;
+  //Quests[3].visible = false;
+
+  Quests[4].stageKeys[0]=7;
+  Quests[4].descriptions[0] = 0;
+  Quests[4].descriptions[1] = 6;
+  Quests[4].title = 5;
+  //Quests[4].visible = false;
+
+  Quests[5].stageKeys[0]=8;
+  Quests[5].descriptions[0] = 0;
+  Quests[5].descriptions[1] = 6;
+  Quests[5].title = 5;
+  //Quests[5].visible = false;
+
+  Quests[6].stageKeys[0]=9;
+  Quests[6].descriptions[0] = 0;
+  Quests[6].descriptions[1] = 6;
+  Quests[6].title = 5;
+  //Quests[6].visible = false;
+
+  Quests[7].stageKeys[0]=10;
+  Quests[7].descriptions[0] = 0;
+  Quests[7].descriptions[1] = 6;
+  Quests[7].title = 5;
+  //Quests[7].visible = false;
+
+  Quests[8].stageKeys[0]=11;
+  Quests[8].descriptions[0] = 0;
+  Quests[8].descriptions[1] = 6;
+  Quests[8].title = 5;
+  //Quests[8].visible = false;
 
   
 

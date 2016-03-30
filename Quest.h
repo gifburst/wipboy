@@ -9,7 +9,7 @@ class Quest
     Quest();
     bool visible = true;
     bool active = true;
-    byte id = 0;
+    byte id = 255;
     byte stage = 0;
     byte maxStage = 1;
     byte stageKeys[5] = {0,0,0,0,0};

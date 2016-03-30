@@ -6,7 +6,7 @@
 #define ADMIN_PW "12345"
 char WIFI_PW[] = "signpost";
 
-#define QUESTCOUNT 3
+#define QUESTCOUNT 9
 // ------------------------
 // text
 // This is all the text to display and graphics to show.
@@ -34,7 +34,8 @@ String localisation[] =
   "Sound on/off",
   "Sound Disabled",
   "Sound Enabled",
-  "Radio"
+  "Radio",
+  "Maps"
 };
 
 // Yes, I'm aware defines are not constants.  I'll convert them over later.  We still have 26k of RAM atm, so we're not suffering yet
@@ -59,6 +60,7 @@ String localisation[] =
 #define S_SOUNDDISABLED 17
 #define S_SOUNDENABLED 18
 #define S_RADIO 19
+#define S_MAPS 20
 
 // ------------------------
 // icons, menu items, modes
@@ -103,27 +105,33 @@ String localisation[] =
 #define NODECHOOSER 111
 #define SETBUZZER 112
 #define QUESTNODECHOOSER 113
+#define RUNPOPUP 114
+#define MAPS 115
 
 byte ModesRef[] =
 {
  STATUS,
  TRACKER,
  QUESTS,
+ MAPS,
+ RADIO,
  SETTINGS,
- RADIO 
 };
 
 String ModesStrings[] = 
 {
   "STATS",
-  "Trkr",
-  "Qsts",
+  "TGT",
+  "QST",
+  "MAP",
+  "RDO",
   "CFG",
-  "Radio"
+  
 };
 // |-------------------------|
 // STATS - Trkr - Quests - CFG   
 // |STATS|Trkr|Qsts|CFG|Radio|
+// STATS Trkr Qsts CFG Rdo Map                                                                  
 // -----------------------------
 // list of colours
 
@@ -150,30 +158,48 @@ String QuestTitles[] =
 {
   "",
   "Default Title",
-  "A Good Introduction",
-  "To Take A Few Steps"  
+  "Introduction",
+  "Our 1st Steps",
+  "Card Thief",
+  "Easter Egg"  
 };
 String QuestDescriptions[] = 
 {
   "",
-  "Welcome! This introductory quest is completed by swiping the right card",
+  "Welcome! This~introductory quest~is completed by~swiping the right card",
   "Quest completed",
   "Swipecard 1 discovered!",
-  "Quest unlocked.  Swipe card 4 to continue",
-  "Swipe card 5 to continue"
+  "Quest unlocked.~Swipe card 3 to~continue",
+  "Swipe card 4 to~continue",
+  "Secret Tag~Discovered",
+  "Steal card 5 and~swipe to complete"
 };
 
-byte StageKeys[5][4]
+byte StageKeys[][4]
 {
+  {35,21,96,0},
   {170,39,62,213},
   {215,140,58,252},
   {147,35,108,0},
   {51,105,104,0},
-  {217,117,58,69}
+  {217,117,58,69},
+  {246,92,251,17},
+  {117,42,172,79},
+  {69,61,173,79},
+  {70,179,113,35},
+  {181,135,169,79},
+  {150,209,250,17}
 };
 
 
-
+int QuestXPAmounts[] = 
+{
+  0,
+  1000,
+  2500,
+  4500,
+  7000,
+};
 
 
 
