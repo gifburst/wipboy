@@ -73,7 +73,7 @@
 // ---------------------------------------------------
 // ---------------------------------------------------
 // screen
-#define TFT_CS     151 // The CS is tied to gnd and
+#define TFT_CS     2 // The CS is tied to gnd and
 #define TFT_RST    150 // the RST is tied to the ESP's RST.  It's easier to just give the library fake pins than to edit the library.
 #define TFT_DC     16   // A0 on the screen
 
@@ -189,10 +189,11 @@ StatusInfo statusInfo = StatusInfo{};
 Icon menuIcons[4] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
 Icon settingIcons[4] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
 Icon colourIcons[12] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10),Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10),Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
-
+Icon mapIcons[4] = {Icon(10,10), Icon(10,10), Icon(10,10), Icon(10,10)};
 // This is so when we change the selection box we know what the
 // previous selected icon was. That way we can clear out the old
 // one.
+byte mapSelected = 0;
 byte lastSelected = 0;
 Icon selectionIcon = Icon(10,10); // This is so we have a simple way of rendering a selection box
 
@@ -1098,18 +1099,73 @@ void runMaps()
 {
   if (State == STARTING)
   {
-    //tft.setCursor(10, 20);
-    //tft.print("Feature not enabled");
     setMenuState();
     changeTitle(S_MAPS);
-
     statusInfo.Update = true;
-    tft.setCursor(10, 40);
-    tft.print("Maps Coming Soon");
+
+    // display the current map
+    // print the list of maps
+    drawMap();
+    for (byte i=0; i < 4; i++)
+    {
+      tft.setCursor(mapIcons[i].x+mapIcons[i].offsetX, mapIcons[i].y+mapIcons[i].offsetY);
+      tft.print(localisation[mapIcons[i].title]);      
+    }
+  }
+
+  else if (State == MENUSTATE)
+  {
+    if (b1.isPressed() == 1)
+    {
+      // we've entered the selection window.  change the state to stop menu choosing and set the knob.
+      knob.setRange(4);
+      lastSelected = knob.getPos();
+      drawSelectionBox(mapIcons[lastSelected]);
+      State = INMODE;
+    }
+  }
+  
+  else if (State == INMODE)
+  {
+    if (knob.hasChanged())
+    {
+      clearSelectionBox(mapIcons[lastSelected]);
+      lastSelected = knob.getPos();
+      drawSelectionBox(mapIcons[lastSelected]);
+    }
+    if (b1.isPressed() == 1)
+    {
+      mapSelected = mapIcons[knob.getPos()].Mode;
+      tft.fillRect(35,12,120,100,bgColour);
+      drawMap();
+      setMenuState();
+    }
   }
 }
 
 
+
+
+void drawMap()
+{
+  if (mapSelected == 0)
+  {
+    tft.drawBitmap(35, 12, m_vhall, 120, 100, fgColour);
+  }
+  if (mapSelected == 1)
+  {
+    tft.drawBitmap(35, 12, m_100n, 120, 100, fgColour);
+  }
+  if (mapSelected == 2)
+  {
+    tft.drawBitmap(35, 12, m_100w, 120, 100, fgColour);
+  }
+  if (mapSelected == 3)
+  {
+    tft.drawBitmap(35, 12, m_100s, 120, 100, fgColour);
+  }
+  
+}
 
 
 // ---------------------------------------------------
@@ -1608,6 +1664,52 @@ void buildIcons()
   settingIcons[2].sbh = 10;
   settingIcons[2].title = S_SETTINGS3;
   settingIcons[2].Mode = SHOWADMINPW;
+
+
+  mapIcons[0].x = 0;
+  mapIcons[0].y = 15;
+  mapIcons[0].w = 32;
+  mapIcons[0].h = 10;
+  mapIcons[0].offsetX=1;
+  mapIcons[0].offsetY=1;
+  mapIcons[0].sbw = 32;
+  mapIcons[0].sbh = 10;
+  mapIcons[0].title = S_VHALL;
+  mapIcons[0].Mode = 0;
+  mapIcons[1].x = 0;
+  mapIcons[1].y = 25;
+  mapIcons[1].w = 32;
+  mapIcons[1].h = 10;
+  mapIcons[1].offsetX=1;
+  mapIcons[1].offsetY=1;
+  mapIcons[1].sbw = 32;
+  mapIcons[1].sbh = 10;
+  mapIcons[1].title = S_100N;
+  mapIcons[1].Mode = 1;
+  mapIcons[2].x = 0;
+  mapIcons[2].y = 35;
+  mapIcons[2].w = 32;
+  mapIcons[2].h = 10;
+  mapIcons[2].offsetX=1;
+  mapIcons[2].offsetY=1;
+  mapIcons[2].sbw = 32;
+  mapIcons[2].sbh = 10;
+  mapIcons[2].title = S_100W;
+  mapIcons[2].Mode = 2;
+  mapIcons[3].x = 0;
+  mapIcons[3].y = 35;
+  mapIcons[3].w = 32;
+  mapIcons[3].h = 10;
+  mapIcons[3].offsetX=1;
+  mapIcons[3].offsetY=1;
+  mapIcons[3].sbw = 32;
+  mapIcons[3].sbh = 10;
+  mapIcons[3].title = S_100S;
+  mapIcons[3].Mode = 3;
+
+
+  
+  
   /*
   settingIcons[3].x = 0;
   settingIcons[3].y = 45;

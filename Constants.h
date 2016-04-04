@@ -35,7 +35,11 @@ String localisation[] =
   "Sound Disabled",
   "Sound Enabled",
   "Radio",
-  "Maps"
+  "Maps",
+  "vhall",
+  "100n",
+  "100s",
+  "100w"
 };
 
 // Yes, I'm aware defines are not constants.  I'll convert them over later.  We still have 26k of RAM atm, so we're not suffering yet
@@ -61,6 +65,10 @@ String localisation[] =
 #define S_SOUNDENABLED 18
 #define S_RADIO 19
 #define S_MAPS 20
+#define S_VHALL 21
+#define S_100N 22
+#define S_100S 23
+#define S_100W 24
 
 // ------------------------
 // icons, menu items, modes
@@ -113,9 +121,9 @@ byte ModesRef[] =
  STATUS,
  TRACKER,
  QUESTS,
+ SETTINGS,
  MAPS,
  RADIO,
- SETTINGS,
 };
 
 String ModesStrings[] = 
@@ -123,10 +131,9 @@ String ModesStrings[] =
   "STATS",
   "TGT",
   "QST",
+  "CFG",  
   "MAP",
-  "RDO",
-  "CFG",
-  
+  "RDO", 
 };
 // |-------------------------|
 // STATS - Trkr - Quests - CFG   
