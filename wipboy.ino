@@ -1,22 +1,3 @@
-/*
-    Wip-Boy 2000. ESP8266-based wristband game system.
-    Copyright (C) 2016 Richard Woodward-Roth
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-
 #include <ESP8266WiFi.h>
 #include "./DNSServer.h"                  // Patched lib
 #include <ESP8266WebServer.h>
@@ -32,47 +13,7 @@
 #include "./WipboyNode.h"
 #include "./Wipboy_Gfx.h"
 #include "./Constants.h"
-
 #include "./Quest.h"
-
-// =======================================
-// Declare
-
-
-/*
- * Pinout for the ESP-12:
- * GPIO 0 - btn to gnd
- * GPIO 1 - 
- * GPIO 2 - buzzer
- * GPIO 3 - 
- * GPIO 4 - RFID SS
- * GPIO 5 - RFID RST
- * GPIO12 - SPI MISO (RFID)
- * GPIO13 - SPI MOSI (RFID, TFT)
- * GPIO14 - SPI CLK (RFID, TFT)
- * GPIO15 - 10k resistor to gnd (open, still useful)
- * GPIO16 - DC on LCD 
- * ADC - control knob
- * 
- * 
- * Given I want to connect the TFT CS back up, it'll
- * probably go onto GPIO15.  Pinouts say to use it too so
- * I doubt it'll be much trouble.  Will test soon.
- * 
- * This leaves specifically 2 GPIO left: 1 and 3.  It's
- * not much, but enough to run I2C.  If the I2C is hard-
- * wired for 4/5 then we just swap the RFID and the I2C.
- * We can't start the I2C (radio/mp3 player) until we get
- * OTA updating working, which is on the back burner ATM.
- * 
- * *If* I want the LEDs on the front it'll have to be
- * through the I2C as well.  Hopes aren't high for those,
- * I'll probably fill those in on future models.
- */
-
-// ---------------------------------------------------
-// ---------------------------------------------------
-// screen
 #define TFT_CS     2 // The CS is tied to gnd and
 #define TFT_RST    150 // the RST is tied to the ESP's RST.  It's easier to just give the library fake pins than to edit the library.
 #define TFT_DC     16   // A0 on the screen
@@ -99,8 +40,8 @@ DNSServer         dnsServer;
 ESP8266WebServer  webServer(80);
 
 String homepageHTML = "<html><head></head><body>Nothing here at the moment.  Coming soon: phone sync'ing</body></html>";
-String HTMLHead = "<html><head><title>Wip-boy Remote!</title><style type=text/css>body{background-color:#000;font-family:Monospace,Lucida Console}.mainBody{border-radius:15px;border:2px solid #59955c;float:left;background-color:#030;color:#fff;background:-webkit-gradient(radial,center center,10,center center,900,from(#39652c),to(#3e4f63))}.borderz{border-radius:15px;border:5px ridge #c9decb}.borderz2{border-radius:11px;border:4px groove #93bf96}.title{font-weight:700;float:left;padding-right:5px}.hline{padding-right:5px;padding-left:5px}.hline:first-of-type{width:5%;float:left}p{padding-left:15px}.entryForm{width:200px;border:3px ridge #c9decb;padding:5px;border-radius:10px}</style><body><div class=main><div class=mainBody><div class=borderz><div class=borderz2><div class=hline><hr></div><div class=title>";
-String HTMLMsgBody1 = "</div><div class=hline><hr></div><br><p>Welcome, vault dweller. Because of the apocalypse, internet and cell phone service is no longer available.<br><br>But fear not! With this interface and your standard-issue Wip-Boy you can again reach out to talk to someone! Just choose your recipient, type your message, and they will receive it on their Wip-boy (assuming they are in range).</p><div class=entryForm><form action=wipboy.com/post method=POST><select name=Target>";
+String HTMLHead = "<html><head><title>Chipmunk Remote!</title><style type=text/css>body{background-color:#000;font-family:Monospace,Lucida Console}.mainBody{border-radius:15px;border:2px solid #59955c;float:left;background-color:#030;color:#fff;background:-webkit-gradient(radial,center center,10,center center,900,from(#39652c),to(#3e4f63))}.borderz{border-radius:15px;border:5px ridge #c9decb}.borderz2{border-radius:11px;border:4px groove #93bf96}.title{font-weight:700;float:left;padding-right:5px}.hline{padding-right:5px;padding-left:5px}.hline:first-of-type{width:5%;float:left}p{padding-left:15px}.entryForm{width:200px;border:3px ridge #c9decb;padding:5px;border-radius:10px}</style><body><div class=main><div class=mainBody><div class=borderz><div class=borderz2><div class=hline><hr></div><div class=title>";
+String HTMLMsgBody1 = "</div><div class=hline><hr></div><br><p>Welcome, User. The Chipmunk can communicate with people near.<br><br>Just choose your recipient, type your message, and they will receive it on their Chipmunk (assuming they are in range).</p><div class=entryForm><form action=wipboy.com/post method=POST><select name=Target>";
 String HTMLMsgBody2 = "</select><br><input name=message maxlength=140> <input type=hidden name=passkey value=";
 String HTMLMsgBody3 = "><input type=submit value=Send></form></div></div></div></div></div></body></html>";
 String HTMLLoginBody1 = "</div><div class=hline><hr></div><p>Type in the password in your Wip-boy's CFG or STATS window to log in.</p><p><form action=login method=POST><input name=passkey maxlength=8></form></p></div></div></div></div></body></html>";
@@ -277,11 +218,6 @@ void setup()
   buildIcons();
   tft.println("GUI constructed");
 
-  buildQuests();
-  compileQuestList();
-  checkLevel();
-  tft.println("Quests added");
-
   
   pinMode(15, OUTPUT);
   digitalWrite(15, HIGH);
@@ -315,14 +251,10 @@ void loop()
 
   if (Mode==TRACKER)
     runTracker();
-  else if (Mode==QUESTS)
-    runQuests();
   else if (Mode==STATUS)
     runStats();
   else if (Mode==SETTINGS)
     runSettings();
-  else if (Mode==RADIO)
-    runRadio();
   else if (Mode==MAPS)
     runMaps();
   else if (Mode==ADJUSTFGCOLOUR)
@@ -684,235 +616,6 @@ int qBase = 0;
 int qCursor = 0;
 int qCount = 0;
 
-
-bool compileQuestList()
-{
-  qCount = 0;
-  Serial.println("-----------");
-  Serial.println("Compiling quests");
-  for (int i=0; i<QUESTCOUNT; i++)
-  {
-    Serial.print("Quest: ");
-    Serial.println(QuestTitles[Quests[i].title]);
-    if (Quests[i].active && Quests[i].visible)
-    {
-      // we can see it. add to the counter
-      Quests[i].id = qCount;
-      qCount++;
-      Serial.println("active&visible");
-    }
-    else
-    {
-      Quests[i].id = 255;
-      Serial.println(Quests[i].active);
-      Serial.println(Quests[i].visible);
-    }
-  }
-  Serial.print("qCount: ");
-  Serial.println(qCount);
-  if (qCount == 0) // we want to tell it not to do anything if there are no active visible quests.
-    return false;  // that way we're not locked into the submenu without any way of getting out.
-
-  /*
-   * Now we need to set the cursor and hte base to where the knob is
-   */
-  //*if (qCount < 10)
-  if (qCount < 5)
-  {
-    qBase = 0;
-    qCursor = qCount-1;
-  }
-  else
-  {
-    //*qCursor = 9;
-    //*qBase = qCount - 10;
-    qCursor = 4;
-    qBase = qCount - 5;
-  }
-  return true;
-}
-
-
-
-void printQuestList()
-{
-  byte counter = 0;
-  /*
-  Serial.println("-----------");
-  Serial.println("Printing quests");
-  Serial.print("qBase: ");
-  Serial.println(qBase);
-  Serial.print("qCount: ");
-  Serial.println(qCount);
-  */
-  //*for (int i = qBase; i < qBase + 10; i++)
-  for (int i = qBase; i < qBase + 5; i++)
-  {
-    //Serial.print("i: ");
-    //Serial.println(i);
-    if (i >= qCount)
-    {
-      //Serial.println("Breaking");
-      break;
-    }
-
-    for (int x=0; x < QUESTCOUNT; x++)
-    {
-      /*Serial.println("---");
-      Serial.print(QuestTitles[Quests[x].title]);
-      Serial.print(": ");
-      Serial.println(Quests[x].id);
-      */
-      if (Quests[x].id == i)
-      {
-        //Serial.println("printing title");
-        tft.setCursor(1, 15+(counter*10));
-        tft.print('-');
-        tft.print(QuestTitles[Quests[x].title]);
-        counter++;        
-        break;
-      }
-    }
-  }
-  // now we have to draw the selectionBox
-}
-
-
-
-bool updateQuestList()
-{
-  /*
-   * so the knob has changed. we need to check whether we just move the selectionbox or redraw the list.
-   */
-  Serial.println(knob.getPos());
-  Serial.println(qBase);
-  if (knob.getPos() > qBase)
-  {
-    qCursor = knob.getPos() - qBase;
-    //*if (qCursor >= 10)
-    if (qCursor >= 10)
-    {
-      // it's gone off the bottom of the screen
-      //*qCursor = 9;
-      //*qBase = knob.getPos() - 10;
-      qCursor = 4;
-      qBase = knob.getPos() - 5;
-    }
-    // otherwise we're happy to just leave it as is
-  }
-  else if (knob.getPos() < qBase)
-  {
-    // this is easy. set the base as the knob and spin from there.
-    qCursor = 0;
-    qBase = knob.getPos();
-  }
-  else
-  {
-    qCursor = knob.getPos();
-    return false; // it moved but not enough to justify redrawing the list
-  } 
-  return true;  // since it did move enough to do something, redraw
-}
-
-
-void runQuests()
-{
-
-  if (State == STARTING)
-  {
-    setMenuState();
-    changeTitle(S_QUESTS);
-    statusInfo.Update = true;
-
-    compileQuestList();
-    printQuestList();
-
-    selectionIcon.sbw = 84;
-  }
-
-  else if (State == MENUSTATE)
-  {
-    if (b1.isPressed() == 1)
-    {
-      /*
-       * if button pressed
-       *  reprint list
-       *  put selection box on quests
-       *  if pressed
-       *    print message
-       *    
-        */
-      printQuestList();
-      knob.setRange(qCount);
-      qCursor = knob.getPos();
-      State = INMODE;
-      selectionIcon.y = 14 + (qCursor * 10);
-      drawSelectionBox(selectionIcon);
-    }
-  }
-
-  else if (State == INMODE)
-  {
-    if (knob.hasChanged())
-    {
-      // clear the selection box.
-      clearSelectionBox(selectionIcon);
-      // check if we have to reprint the list.
-      if (updateQuestList())
-        printQuestList();
-      selectionIcon.y = 14 + (qCursor * 10);
-      drawSelectionBox(selectionIcon);
-    }
-  if (b1.isPressed() == 1)
-    {
-      Serial.println("--questSelected--");
-      Serial.println(knob.getPos());
-      printPopupMsg(&QuestDescriptions[Quests[knob.getPos()].descriptions[Quests[knob.getPos()].stage]]);
-    }      
-  }    
-}
-
-
-// ---------------------------------------------------
-// ---------------------------------------------------
-// ---------------------------------------------------
-void runStats()
-{
-  if (State == STARTING)
-  {
-
-    
-    //tft.setCursor(10, 20);
-    //tft.print("Feature not enabled");
-    setMenuState();
-    changeTitle(S_STATUS);
-    statusInfo.Update = true;
-
-    compileQuestList();
-    
-    tft.setCursor(10, 40);
-    tft.print("Quests");
-    tft.setCursor(10, 50);
-    tft.print(qCount);
-    
-    tft.setCursor(120, 40);
-    tft.print("Level");
-    tft.setCursor(120,50);
-    tft.print(statusInfo.level);
-    
-    tft.setCursor(120, 60);
-    tft.print("XP");
-    tft.setCursor(120,70);
-    tft.print(statusInfo.xp);
-    
-    tft.drawBitmap(48, 32, g_mainmenu, 64, 72, fgColour);
-  }
-}
-
-
-// ---------------------------------------------------
-// ---------------------------------------------------
-// ---------------------------------------------------
 
 void runSettings()
 {
