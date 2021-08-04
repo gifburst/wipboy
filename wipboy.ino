@@ -11,7 +11,6 @@
 #include "./Icon.h"
 
 #include "./WipboyNode.h"
-#include "./Wipboy_Gfx.h"
 #include "./Constants.h"
 #include "./Quest.h"
 #define TFT_CS     2 // The CS is tied to gnd and
